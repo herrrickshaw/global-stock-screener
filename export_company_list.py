@@ -34,16 +34,26 @@ OUT_DIR = Path(__file__).parent / "cache_seed"
 
 # market → (exchange label, currency, yfinance suffix)
 MARKET_META = {
-    "IN": ("NSE/BSE", "INR", ".NS/.BO"), "US": ("NYSE/NASDAQ", "USD", ""),
-    "JP": ("TSE", "JPY", ".T"), "KR": ("KRX", "KRW", ".KS/.KQ"),
-    "CN": ("SSE/SZSE", "CNY", ".SS/.SZ"), "SG": ("SGX", "SGD", ".SI"),
-    "EU": ("Euronext", "EUR", ".PA/.AS"), "HK": ("HKEX", "HKD", ".HK"),
-    "TW": ("TWSE", "TWD", ".TW"), "CA": ("TSX", "CAD", ".TO"),
-    "AU": ("ASX", "AUD", ".AX"), "UK": ("LSE", "GBP", ".L"),
-    "DE": ("Xetra", "EUR", ".DE"), "SA": ("Tadawul", "SAR", ".SR"),
-    "BR": ("B3", "BRL", ".SA"), "CH": ("SIX", "CHF", ".SW"),
-    "ZA": ("JSE", "ZAR", ".JO"), "SE": ("Nasdaq Stockholm", "SEK", ".ST"),
-    "FI": ("Nasdaq Helsinki", "EUR", ".HE"), "DK": ("Nasdaq Copenhagen", "DKK", ".CO"),
+    "IN": ("NSE/BSE", "INR", ".NS/.BO"),
+    "US": ("NYSE/NASDAQ", "USD", ""),
+    "JP": ("TSE", "JPY", ".T"),
+    "KR": ("KRX", "KRW", ".KS/.KQ"),
+    "CN": ("SSE/SZSE", "CNY", ".SS/.SZ"),
+    "SG": ("SGX", "SGD", ".SI"),
+    "EU": ("Euronext", "EUR", ".PA/.AS"),
+    "HK": ("HKEX", "HKD", ".HK"),
+    "TW": ("TWSE", "TWD", ".TW"),
+    "CA": ("TSX", "CAD", ".TO"),
+    "AU": ("ASX", "AUD", ".AX"),
+    "UK": ("LSE", "GBP", ".L"),
+    "DE": ("Xetra", "EUR", ".DE"),
+    "SA": ("Tadawul", "SAR", ".SR"),
+    "BR": ("B3", "BRL", ".SA"),
+    "CH": ("SIX", "CHF", ".SW"),
+    "ZA": ("JSE", "ZAR", ".JO"),
+    "SE": ("Nasdaq Stockholm", "SEK", ".ST"),
+    "FI": ("Nasdaq Helsinki", "EUR", ".HE"),
+    "DK": ("Nasdaq Copenhagen", "DKK", ".CO"),
 }
 
 
@@ -68,8 +78,18 @@ def build(markets=None) -> pd.DataFrame:
         if df.empty:
             continue
         exch, ccy, suffix = MARKET_META.get(mkt, (mkt, "", ""))
-        keep = df[["Symbol", "Close", "Turnover_USD", "Liquidity", "LastDate",
-                   "Bars", "Above200DMA", "Ret252"]].copy()
+        keep = df[
+            [
+                "Symbol",
+                "Close",
+                "Turnover_USD",
+                "Liquidity",
+                "LastDate",
+                "Bars",
+                "Above200DMA",
+                "Ret252",
+            ]
+        ].copy()
         keep.insert(0, "Market", mkt)
         keep.insert(2, "Name", keep["Symbol"].map(names).fillna(""))
         keep.insert(3, "Exchange", exch)
@@ -78,7 +98,9 @@ def build(markets=None) -> pd.DataFrame:
     if not parts:
         return pd.DataFrame()
     out = pd.concat(parts, ignore_index=True)
-    return out.sort_values(["Market", "Turnover_USD"], ascending=[True, False]).reset_index(drop=True)
+    return out.sort_values(["Market", "Turnover_USD"], ascending=[True, False]).reset_index(
+        drop=True
+    )
 
 
 def main() -> int:
@@ -94,8 +116,10 @@ def main() -> int:
     df.to_csv(csv, index=False)
     df.to_parquet(pq, compression="zstd", index=False)
     named = int((df["Name"] != "").sum())
-    print(f"  {len(df):,} companies across {df['Market'].nunique()} markets "
-          f"({named:,} with names)")
+    print(
+        f"  {len(df):,} companies across {df['Market'].nunique()} markets "
+        f"({named:,} with names)"
+    )
     print(f"  → {csv.relative_to(OUT_DIR.parent)}")
     print(f"  → {pq.relative_to(OUT_DIR.parent)}")
     print("\n  per market:")
