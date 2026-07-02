@@ -27,7 +27,7 @@ from __future__ import annotations
 import argparse
 import warnings
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -39,9 +39,32 @@ import datalink
 MODEL_DIR = Path(__file__).parent / "cache_seed" / "models"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-FEATURES = ["rsi14", "ret21", "ret63", "ret126", "pct_from_high", "pct_from_low",
-            "above_200dma", "golden_cross", "vol_ratio", "log_turnover"]
+FEATURES = [
+    "rsi14",
+    "ret21",
+    "ret63",
+    "ret126",
+    "pct_from_high",
+    "pct_from_low",
+    "above_200dma",
+    "golden_cross",
+    "vol_ratio",
+    "log_turnover",
+]
 CLASS_NAMES = {0: "Avoid", 1: "Hold", 2: "Buy", 3: "Strong Buy"}
+
+try:
+    from leverage_features import LEV_FEATURES, merge_leverage
+except Exception:  # leverage features optional
+    LEV_FEATURES = []
+
+    def merge_leverage(frame, market):  # type: ignore
+        return frame
+
+
+def _feature_list(cols) -> list:
+    """Technical features + any leverage features actually present in the frame."""
+    return FEATURES + [c for c in LEV_FEATURES if c in cols]
 
 
 # ── features at a point in time (only data up to t — no lookahead) ───────────────
@@ -113,15 +136,24 @@ def build_dataset(
             rows.append(f)
     if not rows:
         return pd.DataFrame(columns=FEATURES + ["Symbol", "asof", "label"])
-    return pd.DataFrame(rows).sort_values("asof").reset_index(drop=True)
+    ds = pd.DataFrame(rows).sort_values("asof").reset_index(drop=True)
+    # enrich with per-symbol leverage features (debt-driven balance-sheet signal)
+    ds = merge_leverage(ds, market)
+    return ds
 
 
 def _make_model():
     try:
         from xgboost import XGBClassifier
 
-        return XGBClassifier(n_estimators=300, max_depth=5, learning_rate=0.05,
-                             subsample=0.8, colsample_bytree=0.8, eval_metric="mlogloss")
+        return XGBClassifier(
+            n_estimators=300,
+            max_depth=5,
+            learning_rate=0.05,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            eval_metric="mlogloss",
+        )
     except Exception:
         from sklearn.ensemble import HistGradientBoostingClassifier
 
@@ -150,7 +182,8 @@ def train(market: str, horizon: int = 252, verbose: bool = True) -> dict:
         raise RuntimeError(f"too few training samples for {market} ({len(ds)})")
     if verbose:
         print(f"  effective horizon: {horizon}d (LTM depth-limited)")
-    X, y = ds[FEATURES].to_numpy(), ds["label"].to_numpy()
+    feat = _feature_list(ds.columns)
+    X, y = ds[feat].to_numpy(dtype="float64"), ds["label"].to_numpy()
 
     accs = []
     tscv = TimeSeriesSplit(n_splits=5)
@@ -161,15 +194,35 @@ def train(market: str, horizon: int = 252, verbose: bool = True) -> dict:
 
     model = _make_model()
     model.fit(X, y)  # final fit on all data
-    joblib.dump({"model": model, "features": FEATURES, "horizon": horizon}, MODEL_DIR / f"{market}.pkl")
+    joblib.dump({"model": model, "features": feat, "horizon": horizon}, MODEL_DIR / f"{market}.pkl")
 
     imp = _importances(model, X, y)
+    lev_used = [c for c in feat if c in LEV_FEATURES]
     if verbose:
-        print(f"  trained {market}: {len(ds)} samples, walk-forward acc "
-              f"{np.mean(accs):.3f}±{np.std(accs):.3f}")
-        print("  top features: " + ", ".join(f"{FEATURES[i]}={imp[i]:.2f}" for i in np.argsort(imp)[::-1][:5]))
-        print("  label mix: " + ", ".join(f"{CLASS_NAMES[c]}={int((y==c).sum())}" for c in sorted(set(y))))
-    return {"market": market, "samples": len(ds), "cv_acc": float(np.mean(accs))}
+        print(
+            f"  trained {market}: {len(ds)} samples, walk-forward acc "
+            f"{np.mean(accs):.3f}±{np.std(accs):.3f}"
+        )
+        print(
+            "  top features: "
+            + ", ".join(f"{feat[i]}={imp[i]:.2f}" for i in np.argsort(imp)[::-1][:5])
+        )
+        if lev_used:
+            print(
+                "  leverage importances: "
+                + ", ".join(f"{c}={imp[feat.index(c)]:.3f}" for c in lev_used)
+            )
+        print(
+            "  label mix: "
+            + ", ".join(f"{CLASS_NAMES[c]}={int((y==c).sum())}" for c in sorted(set(y)))
+        )
+    return {
+        "market": market,
+        "samples": len(ds),
+        "cv_acc": float(np.mean(accs)),
+        "features": feat,
+        "leverage_used": lev_used,
+    }
 
 
 def _importances(model, X, y) -> np.ndarray:
@@ -203,9 +256,13 @@ def predict_current(market: str) -> pd.DataFrame:
             rows.append(f)
     if not rows:
         return pd.DataFrame()
-    cur = pd.DataFrame(rows)
+    cur = merge_leverage(pd.DataFrame(rows), market)
     model = bundle["model"]
-    proba = model.predict_proba(cur[FEATURES].to_numpy())
+    feat = bundle.get("features", FEATURES)
+    for c in feat:  # ensure every trained feature exists (NaN if absent)
+        if c not in cur.columns:
+            cur[c] = np.nan
+    proba = model.predict_proba(cur[feat].to_numpy(dtype="float64"))
     cur["pred_class"] = proba.argmax(1)
     cur["pred_name"] = cur["pred_class"].map(CLASS_NAMES)
     cur["score"] = proba[:, 2:].sum(1)  # P(Buy) + P(Strong Buy)
@@ -224,7 +281,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Supervised forward-return classifier (doc Layer 1)")
     ap.add_argument("--market", default="IN")
     ap.add_argument("--train", action="store_true")
-    ap.add_argument("--horizon", type=int, default=252, help="forward return horizon in trading days")
+    ap.add_argument(
+        "--horizon", type=int, default=252, help="forward return horizon in trading days"
+    )
     ap.add_argument("--top", type=int, default=15)
     args = ap.parse_args()
 
@@ -236,7 +295,11 @@ def main() -> int:
     if cur.empty:
         print("no model — run --train first")
         return 0
-    cols = [c for c in ["Symbol", "pred_name", "score", "rsi14", "ret63", "pct_from_high"] if c in cur.columns]
+    cols = [
+        c
+        for c in ["Symbol", "pred_name", "score", "rsi14", "ret63", "pct_from_high"]
+        if c in cur.columns
+    ]
     print(f"\nTop {args.top} supervised Buy/Strong-Buy — {args.market}:")
     print(cur[cur["score"] >= 0.5][cols].head(args.top).to_string(index=False))
     return 0
