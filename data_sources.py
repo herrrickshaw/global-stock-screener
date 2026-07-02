@@ -210,6 +210,7 @@ def fetch(
     handles the tickers still missing after the previous one."""
     result: Dict[str, pd.DataFrame] = {}
     pending = list(dict.fromkeys(tickers))
+    per_source: Dict[str, int] = {}
     for src in order:
         if not pending:
             break
@@ -222,11 +223,25 @@ def fetch(
         if src in ("yahoo", "eodhd"):
             kw["period"] = period
         got = fn(pending, **kw)
+        per_source[src] = len(got)
         result.update(got)
         pending = [t for t in pending if t not in result]
+    LAST_STATS.clear()
+    LAST_STATS.update(
+        {"requested": len(set(tickers)), "filled": len(result), "by_source": per_source}
+    )
     if verbose:
         print(f"  multi-source total: {len(result)}/{len(tickers)} " f"({len(pending)} unresolved)")
     return result
+
+
+# Per-run fill stats from the last fetch() — read by the dashboard's source
+# fill-rate line. {requested, filled, by_source: {stooq: n, eodhd: n, yahoo: n}}.
+LAST_STATS: Dict[str, object] = {}
+
+
+def get_last_stats() -> Dict[str, object]:
+    return dict(LAST_STATS)
 
 
 if __name__ == "__main__":
