@@ -1,0 +1,17 @@
+# vCRUD System Dependencies
+# Install with: pip install -r requirements_vcrud.txt
+
+# PostgreSQL Database Adapter
+psycopg2-binary>=2.9.0
+
+# Standard library (included in Python, but listed for reference):
+# - pathlib (file system operations)
+# - gzip (compression/decompression)
+# - hashlib (SHA256 checksums)
+# - subprocess (Git operations)
+# - json (JSON export)
+# - logging (logging)
+# - argparse (CLI)
+# - datetime (timestamps)
+# - dataclasses (FileRecord)
+# - typing (type hints)
