@@ -128,3 +128,9 @@ Format per record:
   - **Decision** — add `groww_source.py` and register `groww` as an **opt-in** provider in `data_sources` (NOT default). Keys live in `.env` only. Auth + the instrument master (138,630 rows) work on the basic plan and are usable now; OHLC (live + historical) is wired but gated on the account's **market-data entitlement** (currently 403).
   - **Impact** — Groww auth/instruments available immediately; OHLC becomes usable the moment market-data is enabled, via `data_sources.fetch(order=("groww","yahoo"))`. Stays India-only, so bhavcopy remains the IN EOD primary ([[ADR-17]]). Token/secret were pasted in chat → must be rotated.
   - **Alternatives** — wait for entitlement before writing any code (rejected: auth+instruments already deliver value and the OHLC path is ready); make Groww the IN default (rejected: 403 today, and bhavcopy already covers IN EOD).
+
+- **ADR-20 — Widen LTM window 5y → 10y; deep backfill via bulk_seed** `accepted` (2026-07-02)
+  - **Context** — [[ADR-01]] set a 5y LTM, but backtests and the debt/leverage ML ([[ADR-18]]) benefit from deeper history; Yahoo `.NS`/`.BO` and bare US tickers carry 15–30y (RELIANCE.NS to 1996, verified).
+  - **Decision** — set `market_memory.LTM_YEARS = 10` and add `bulk_seed.py` (yfinance deep backfill + Kaggle/CSV import) to populate it. STM stays 1y. Eviction now trims at 10y.
+  - **Impact** — LTM can hold up to 10y; US backfilled 9,178/9,278 symbols (rows 2.2M→9.6M at 5y, deeper with `--period max`); IN deepened for the ~300 liquid names that resolve on Yahoo (SME/bond codes have no listing). Larger LFS footprint is the cost.
+  - **Alternatives** — keep 5y (shallower backtests); external tick DB (overkill); paid EODHD for cleaner deep history ([[ADR-16]] path, still available).
