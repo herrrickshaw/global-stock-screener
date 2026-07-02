@@ -103,3 +103,9 @@ Format per record:
   - **Decision** — secrets live only in `.env` (gitignored); a governance no-secrets check scans tracked files; passwords pasted in chat must be rotated.
   - **Impact** — no secret has entered version control; enforced by CI.
   - **Alternatives** — a secrets manager (overkill for a solo local repo).
+
+- **ADR-16 — Stooq-first OHLC chain + optional EODHD; no Bloomberg/Groww** `accepted` (2026-07-02)
+  - **Context** — Yahoo/yfinance now 429-rate-limits anonymous access, the dominant cost of the daily run. Evaluated broker/terminal data (Groww, Bloomberg).
+  - **Decision** — reorder the `data_sources.fetch` chain to stooq → eodhd → yahoo (Yahoo last); add an optional `EODHD_API_KEY` provider (20+ exchanges) that is dormant when unkeyed. Reject Bloomberg (≈$28k/yr, license bars committing/redistributing data, needs a live Terminal) and Groww (India-only, EOD already covered by free bhavcopy).
+  - **Impact** — Yahoo 429s stop gating the run; the stack stays $0 by default; a ~$100/yr EODHD key is a one-line upgrade path that preserves the offline-first, LFS-versioned design. India EOD stays on bhavcopy.
+  - **Alternatives** — Bloomberg/Refinitiv (cost + licensing incompatible with an open, LFS-committed repo); Groww (India-only, no gain over bhavcopy for EOD); Polygon/Tiingo/Norgate (viable equivalents to EODHD).
