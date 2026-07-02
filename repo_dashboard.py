@@ -237,6 +237,30 @@ def _challenges(markets: List[str], metrics: dict, status: Optional[dict] = None
     return "<ul>" + "".join(f"<li>{i}</li>" for i in issues) + "</ul>"
 
 
+def _decision_register(n: int = 8) -> str:
+    """Card: recent Architecture Decision Records with their impact (traceability)."""
+    import decisions as d
+
+    recs = d.load()
+    if not recs:
+        return "<p style='color:#999'>No decision register found.</p>"
+    rows = ["<tr><th>ADR</th><th>Decision</th><th>Status</th><th>Impact</th></tr>"]
+    for r in recs[-n:][::-1]:
+        rows.append(
+            f"<tr><td><b>{r.id}</b></td><td>{r.title}</td><td>{r.status}</td>"
+            f"<td style='font-size:12px;color:#555'>{r.impact[:160]}</td></tr>"
+        )
+    tail = (
+        f"<p style='font-size:11px;color:#888'>{len(recs)} decisions logged · see DECISIONS.md</p>"
+    )
+    return (
+        "<table border=1 cellpadding=4 style='border-collapse:collapse'>"
+        + "".join(rows)
+        + "</table>"
+        + tail
+    )
+
+
 def _recent_activity(n: int = 12) -> str:
     try:
         out = subprocess.run(
@@ -391,6 +415,10 @@ def assemble(markets: Optional[List[str]] = None) -> Tuple[str, str, str]:
         ),
         _card("💾 Data Coverage", _safe(lambda: _data_coverage(markets), "coverage unavailable")),
         _card("🧭 SAFe Backlog (open, WSJF-ranked)", _safe(_backlog_table, "backlog unavailable")),
+        _card(
+            "📒 Decision Register (ADRs)",
+            _safe(lambda: _decision_register(8), "decision register unavailable"),
+        ),
         _card("🛠️ Recent Activity", _safe(lambda: _recent_activity(12), "git log unavailable")),
         "<p style='font-size:11px;color:#bf360c'>⚠️ Research/education only. NOT investment advice. "
         "Consult a SEBI-registered advisor.</p>",
