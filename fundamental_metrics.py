@@ -110,7 +110,7 @@ def load_fundamentals(market: str, limit: int = 40, verbose: bool = True,
     _flush(rows)
     out = pd.read_parquet(path) if path.exists() else pd.DataFrame()
     if verbose:
-        print(f"  fundamentals[{market}]: +{len(fresh)} fetched, {len(out)} total cached")
+        print(f"  fundamentals[{market}]: +{len(want)} attempted, {len(out)} total cached")
     # attach market cap from latest price × shares
     px = _prices(market)
     if not out.empty:
