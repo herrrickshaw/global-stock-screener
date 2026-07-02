@@ -11,7 +11,7 @@ def test_endpoints_registry_shape():
 
 def test_probe_offline_degrades(monkeypatch):
     # force every probe to fail fast (no network dependency in CI)
-    def boom(name, purpose, url, timeout):
+    def boom(name, purpose, url, timeout, ua=""):
         return {
             "name": name,
             "purpose": purpose,
