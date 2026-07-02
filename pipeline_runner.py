@@ -22,6 +22,7 @@ import argparse
 import datetime as _dt
 import json
 import subprocess
+import time
 from pathlib import Path
 from typing import Dict, List
 
@@ -130,13 +131,34 @@ def _api_health() -> list:
         return []
 
 
+def _source_fill() -> dict:
+    """Per-source OHLC fill rate from the last data_sources.fetch (stooq/eodhd/yahoo)."""
+    try:
+        import data_sources
+
+        return data_sources.get_last_stats() or {}
+    except Exception:
+        return {}
+
+
+def _timed(status: dict, key: str, fn):
+    """Run fn(), record its wall-clock seconds under status['timing'][key]."""
+    t = time.time()
+    result = fn()
+    status.setdefault("timing", {})[key] = round(time.time() - t, 1)
+    return result
+
+
 def stage_scan(markets: List[str], repo: Path, out_dir: Path) -> dict:
+    t0 = time.time()
     status = _read_status(out_dir)
-    status["data_update"] = _data_update(markets)
-    status["scans"] = _run_scans(markets, repo)
+    status["data_update"] = _timed(status, "data_update", lambda: _data_update(markets))
+    status["source_fill"] = _source_fill()
+    status["scans"] = _timed(status, "scans", lambda: _run_scans(markets, repo))
     status["pipeline"] = _pipeline_health(markets)
-    status["news"] = _news(markets)
-    status["api_health"] = _api_health()
+    status["news"] = _timed(status, "news", lambda: _news(markets))
+    status["api_health"] = _timed(status, "api_health", _api_health)
+    status.setdefault("timing", {})["scan_total"] = round(time.time() - t0, 1)
     _write_status(out_dir, status)
     return status
 
@@ -213,6 +235,7 @@ def _check_imports(repo: Path) -> dict:
 
 
 def stage_checks(repo: Path, out_dir: Path) -> dict:
+    t0 = time.time()
     status = _read_status(out_dir)
     status["code_health"] = {
         "lint": _check_lint(repo),
@@ -220,6 +243,7 @@ def stage_checks(repo: Path, out_dir: Path) -> dict:
         "governance": _check_governance(repo),
         "imports": _check_imports(repo),
     }
+    status.setdefault("timing", {})["checks"] = round(time.time() - t0, 1)
     _write_status(out_dir, status)
     return status
 

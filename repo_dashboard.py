@@ -276,6 +276,43 @@ def _api_health(status: dict) -> str:
     )
 
 
+def _run_timing(status: dict) -> str:
+    """Card: last run's per-stage wall-clock time + per-source OHLC fill rate."""
+    timing = (status or {}).get("timing") or {}
+    fill = (status or {}).get("source_fill") or {}
+    if not timing and not fill:
+        return "<p style='color:#999'>No timing recorded yet (orchestrator has not run).</p>"
+
+    parts = []
+    if timing:
+        labels = {
+            "data_update": "Data update",
+            "scans": "Scans",
+            "news": "News",
+            "api_health": "API health",
+            "checks": "Code checks",
+            "scan_total": "Scan stage total",
+        }
+        rows = ["<tr><th>Stage</th><th>Seconds</th></tr>"]
+        for k in ["data_update", "scans", "news", "api_health", "checks", "scan_total"]:
+            if k in timing:
+                rows.append(f"<tr><td>{labels[k]}</td><td>{timing[k]}s</td></tr>")
+        parts.append(
+            "<table border=1 cellpadding=4 style='border-collapse:collapse'>"
+            + "".join(rows)
+            + "</table>"
+        )
+    if fill:
+        by = fill.get("by_source", {})
+        req, got = fill.get("requested", 0), fill.get("filled", 0)
+        chips = " · ".join(f"{k}: {v}" for k, v in by.items()) if by else "—"
+        parts.append(
+            f"<p style='margin:8px 0 0'><b>OHLC fill:</b> {got}/{req} tickers &nbsp; "
+            f"<span style='font-size:12px;color:#666'>by source — {chips}</span></p>"
+        )
+    return "".join(parts)
+
+
 def _decision_register(n: int = 8) -> str:
     """Card: recent Architecture Decision Records with their impact (traceability)."""
     import decisions as d
@@ -453,6 +490,9 @@ def assemble(markets: Optional[List[str]] = None) -> Tuple[str, str, str]:
             _safe(lambda: _stock_lists(markets), "stock lists unavailable"),
         ),
         _card("🔌 API Health", _safe(lambda: _api_health(status), "api health unavailable")),
+        _card(
+            "⏱️ Run Time &amp; Source Fill", _safe(lambda: _run_timing(status), "timing unavailable")
+        ),
         _card("💾 Data Coverage", _safe(lambda: _data_coverage(markets), "coverage unavailable")),
         _card("🧭 SAFe Backlog (open, WSJF-ranked)", _safe(_backlog_table, "backlog unavailable")),
         _card(
