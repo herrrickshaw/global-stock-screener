@@ -4,11 +4,15 @@
 # Redundant OHLC sourcing with an ordered fallback chain, so a Yahoo Finance
 # rate-limit (429 / "Invalid Crumb") no longer breaks data collection.
 #
-# Chain (first that returns data for a ticker wins):
-#   1. Stooq        — free, no key, global EOD CSV (https://stooq.com)         [backup]
-#   2. Yahoo        — yfinance bulk download                                   [primary]
+# Chain (first that returns data for a ticker wins) — Stooq-first to sidestep
+# Yahoo's tightening anonymous rate limits (429), with an optional keyed source:
+#   1. Stooq        — free, no key, global EOD CSV (https://stooq.com)         [primary]
+#   2. EODHD        — optional, one key (EODHD_API_KEY); 20+ exchanges         [keyed fill]
+#   3. Yahoo        — yfinance bulk download                                   [fallback]
 #   (India is sourced separately from official NSE/BSE bhavcopy — see
 #    bhavcopy_history.py — and does not go through this chain.)
+#
+# EODHD is dormant unless EODHD_API_KEY is set, so the default stack stays $0.
 #
 # fetch() runs the requested order, collects misses after each source, and tries
 # the next source only for the still-missing tickers. Returns {ticker: OHLCV df}.
@@ -94,6 +98,95 @@ def stooq_fetch(
     return out
 
 
+# ── EODHD (optional key: $0 if unset) ───────────────────────────────────────────
+# One optional paid source that reliably covers 20+ exchanges + fundamentals.
+# Dormant unless EODHD_API_KEY is set, so the default stack stays free/keyless.
+_EODHD_EXCH = {
+    ".T": "TSE",
+    ".L": "LSE",
+    ".DE": "XETRA",
+    ".F": "XETRA",
+    ".PA": "PA",
+    ".AS": "AS",
+    ".BR": "BR",
+    ".MI": "MI",
+    ".MC": "MC",
+    ".HK": "HK",
+    ".SW": "SW",
+    ".ST": "ST",
+    ".KS": "KO",
+    ".SS": "SHG",
+    ".SZ": "SHE",
+    ".NS": "NSE",
+    ".BO": "BSE",
+    ".SI": "SG",
+    ".AX": "AU",
+    ".TO": "TO",
+    ".SA": "SA",
+}
+
+
+def _eodhd_symbol(t: str) -> str | None:
+    for yf_suf, ex in _EODHD_EXCH.items():
+        if t.endswith(yf_suf):
+            return t[: -len(yf_suf)] + "." + ex
+    if "." not in t:  # bare ticker → US
+        return t + ".US"
+    return None
+
+
+def _period_to_from(period: str) -> str | None:
+    """Map a yfinance-style period to an EODHD `from` date (None = full history)."""
+    import datetime as _dt
+    import re
+
+    m = re.fullmatch(r"(\d+)(d|mo|y)", period or "")
+    if not m:
+        return None
+    n, unit = int(m.group(1)), m.group(2)
+    days = {"d": 1, "mo": 31, "y": 366}[unit] * n + 5  # pad for weekends/holidays
+    return (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
+
+
+def eodhd_fetch(
+    tickers: List[str], period: str = "1y", min_bars: int = 60, verbose: bool = True
+) -> Dict[str, pd.DataFrame]:
+    import os
+
+    key = os.environ.get("EODHD_API_KEY", "")
+    if not key:
+        return {}  # dormant when unkeyed — keeps the stack $0
+    out: Dict[str, pd.DataFrame] = {}
+    frm = _period_to_from(period)
+    sess = requests.Session()
+    sess.headers.update(_UA)
+    for t in tickers:
+        s = _eodhd_symbol(t)
+        if not s:
+            continue
+        try:
+            params = {"api_token": key, "fmt": "csv", "period": "d"}
+            if frm:
+                params["from"] = frm
+            r = sess.get(f"https://eodhd.com/api/eod/{s}", params=params, timeout=20)
+            if r.status_code != 200 or not r.text.startswith("Date"):
+                continue
+            df = pd.read_csv(io.StringIO(r.text))
+            if df.empty or "Close" not in df.columns:
+                continue
+            df["Date"] = pd.to_datetime(df["Date"])
+            df = df.set_index("Date")[["Open", "High", "Low", "Close", "Volume"]]
+            if clean_ohlcv is not None:
+                df = clean_ohlcv(df, ticker=t, min_bars=min_bars)
+            if df is not None and len(df) >= min_bars:
+                out[t] = df
+        except Exception:
+            continue
+    if verbose:
+        print(f"    eodhd: {len(out)}/{len(tickers)} fetched")
+    return out
+
+
 # ── Yahoo ──────────────────────────────────────────────────────────────────────
 def yahoo_fetch(
     tickers: List[str], period: str = "1y", min_bars: int = 60, verbose: bool = True
@@ -103,12 +196,12 @@ def yahoo_fetch(
     return _yahoo_bulk(tickers, period=period, batch_size=80, min_bars=min_bars, verbose=verbose)
 
 
-SOURCES = {"stooq": stooq_fetch, "yahoo": yahoo_fetch}
+SOURCES = {"stooq": stooq_fetch, "eodhd": eodhd_fetch, "yahoo": yahoo_fetch}
 
 
 def fetch(
     tickers: List[str],
-    order=("yahoo", "stooq"),
+    order=("stooq", "eodhd", "yahoo"),
     period: str = "1y",
     min_bars: int = 60,
     verbose: bool = True,
@@ -126,7 +219,7 @@ def fetch(
         if verbose:
             print(f"  source '{src}': attempting {len(pending)} tickers …")
         kw = dict(min_bars=min_bars, verbose=verbose)
-        if src == "yahoo":
+        if src in ("yahoo", "eodhd"):
             kw["period"] = period
         got = fn(pending, **kw)
         result.update(got)
