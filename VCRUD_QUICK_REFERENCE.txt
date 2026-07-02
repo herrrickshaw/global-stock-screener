@@ -1,0 +1,177 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    vCRUD Quick Reference Card                              ║
+║         Reference Model: Use from feature/vcrud-system-tracker             ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+QUICK START (From Any Branch)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Switch to vCRUD
+git checkout feature/vcrud-system-tracker
+
+# Find duplicates (no setup needed)
+python find_duplicates_standalone.py
+
+# Back to your work
+git checkout -
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COMMON TASKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌─ Find Duplicates ─────────────────────────────────────────────────────────┐
+│ git checkout feature/vcrud-system-tracker                                 │
+│ python find_duplicates_standalone.py                                      │
+│ # Output: Shows all duplicate files across branches                       │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌─ Compare Your Branch to Main ─────────────────────────────────────────────┐
+│ git checkout feature/vcrud-system-tracker                                 │
+│ python vcrud_cli.py compare --branch1 main --branch2 your-branch          │
+│ # Output: Files only in main, only in your branch, common                 │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌─ Get File Statistics ─────────────────────────────────────────────────────┐
+│ python vcrud_cli.py stats --branch your-branch                            │
+│ # Output: File count, size, compression ratio                             │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌─ Optimize Storage ────────────────────────────────────────────────────────┐
+│ python vcrud_cli.py optimize --branch your-branch                         │
+│ # Output: Recommendations for storage optimization                        │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌─ List All Files on Branch ────────────────────────────────────────────────┐
+│ python vcrud_cli.py list --branch your-branch                             │
+│ # Output: All files with sizes (top 50)                                   │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌─ Export Analysis to JSON ─────────────────────────────────────────────────┐
+│ python vcrud_cli.py export --branch your-branch -o report.json            │
+│ # Output: Detailed report for further analysis                            │
+└───────────────────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WORKFLOW: Before Submitting PR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+git stash                                          # Save your work
+git checkout feature/vcrud-system-tracker          # Switch to vCRUD
+python find_duplicates_standalone.py               # Check for dups
+python vcrud_cli.py compare --branch1 main --branch2 your-branch
+git checkout -                                     # Back to your branch
+git stash pop                                      # Restore work
+
+# Include findings in your PR description
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SETUP (One-Time)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Minimal (Standalone):
+  Just Python 3.9+ - No other setup needed
+
+Full System (Optional):
+  brew install postgresql@16
+  brew services start postgresql@16
+  psql postgres -c "CREATE DATABASE vcrud; CREATE USER vcrud_user WITH PASSWORD 'password'; GRANT ALL ON DATABASE vcrud TO vcrud_user;"
+  pip install -r requirements_vcrud.txt
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GIT ALIASES (Optional - Faster Access)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add to ~/.zshrc or ~/.bash_profile:
+
+vcrud-check() {
+  local branch=$(git rev-parse --abbrev-ref HEAD)
+  git stash
+  git checkout feature/vcrud-system-tracker
+  python find_duplicates_standalone.py
+  git checkout "$branch"
+  git stash pop 2>/dev/null
+}
+
+vcrud-compare() {
+  local branch=$(git rev-parse --abbrev-ref HEAD)
+  git checkout feature/vcrud-system-tracker
+  python vcrud_cli.py compare --branch1 main --branch2 "$branch"
+  git checkout "$branch"
+}
+
+Then use:
+  vcrud-check     # Find duplicates
+  vcrud-compare   # Compare with main
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DOCUMENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+README:              VCRUD_README.md
+Setup:               VCRUD_SETUP.md
+Commands:            VCRUD_CHEATSHEET.md
+Architecture:        VCRUD_ARCHITECTURE.md
+Integration (THIS):  USE_VCRUD_FROM_BRANCH.md
+Integration Guide:   VCRUD_INTEGRATION_GUIDE.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+USE CASES BY BRANCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+main:
+  vcrud-compare
+  vcrud-stats
+  → Baseline for all other branches
+
+global-expansion-screener-v3.1:
+  vcrud-check                                 # Found 33.5 MB duplicates
+  python vcrud_cli.py optimize --branch global-expansion-screener-v3.1
+  → Optimize cache files before pushing
+
+feature/darvas-interpreter:
+  vcrud-compare                               # What did you add/remove?
+  vcrud-check                                 # Any duplicates?
+  → Include results in PR
+
+feature/scanner-optimise:
+  vcrud-stats                                 # How much did code grow?
+  vcrud-compare                               # File additions
+  → Before PR review
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+"No module named psycopg2"
+  → Use standalone: python find_duplicates_standalone.py
+     Works without database
+
+PostgreSQL errors
+  → Standalone tool doesn't need PostgreSQL
+     Use: python find_duplicates_standalone.py
+
+Want latest vCRUD?
+  → git fetch origin feature/vcrud-system-tracker
+     Then: git checkout feature/vcrud-system-tracker
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KEY FILES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+find_duplicates_standalone.py       Duplicate finder (no DB)
+vcrud_cli.py                        Command-line interface
+db_handler.py                       Database & compression
+vcrud_manager.py                    High-level CRUD operations
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GITHUB
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Branch:  feature/vcrud-system-tracker
+URL:     https://github.com/herrrickshaw/global-stock-screener/tree/feature/vcrud-system-tracker
+Status:  Active (use it anytime, no merging needed)
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║ Remember: No need to merge. Just switch to the branch when you need it.   ║
+╚════════════════════════════════════════════════════════════════════════════╝
