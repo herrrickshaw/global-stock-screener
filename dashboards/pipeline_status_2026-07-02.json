@@ -1,0 +1,138 @@
+{
+  "timing": {
+    "data_update": 514.6,
+    "scans": 742.5,
+    "news": 10.1,
+    "api_health": 2.3,
+    "scan_total": 1270.1
+  },
+  "data_update": {
+    "ok": true,
+    "detail": "IN: +0; US: +0; serving refreshed"
+  },
+  "source_fill": {
+    "requested": 9278,
+    "filled": 9246,
+    "by_source": {
+      "yahoo": 9246
+    }
+  },
+  "scans": {
+    "ok": true,
+    "detail": "combined report written for: IN, US"
+  },
+  "pipeline": {
+    "ok": true,
+    "detail": "all tiers populated"
+  },
+  "news": {
+    "IN": {
+      "outlet_counts": {
+        "Moneycontrol": 38,
+        "EconomicTimes": 100,
+        "BusinessLine": 120,
+        "LiveMint": 70,
+        "NDTVProfit": 20
+      },
+      "n_articles": 348,
+      "score": 0.416,
+      "mood": "POSITIVE"
+    },
+    "US": {
+      "outlet_counts": {
+        "CNBC": 90,
+        "MarketWatch": 50,
+        "WSJ": 61,
+        "YahooFinance": 48,
+        "SeekingAlpha": 7,
+        "Nasdaq": 15,
+        "Benzinga": 10,
+        "Investing": 10
+      },
+      "n_articles": 291,
+      "score": 0.254,
+      "mood": "POSITIVE"
+    }
+  },
+  "api_health": [
+    {
+      "name": "Yahoo/yfinance",
+      "purpose": "OHLC history",
+      "ok": false,
+      "code": 429,
+      "ms": 131,
+      "error": "HTTP Error 429: Too Many Requests"
+    },
+    {
+      "name": "BSE India",
+      "purpose": "India EOD",
+      "ok": true,
+      "code": 200,
+      "ms": 83
+    },
+    {
+      "name": "Stooq",
+      "purpose": "OHLC fallback",
+      "ok": true,
+      "code": 200,
+      "ms": 1003
+    },
+    {
+      "name": "SEC XBRL",
+      "purpose": "US fundamentals",
+      "ok": true,
+      "code": 200,
+      "ms": 505
+    },
+    {
+      "name": "SEC tickers",
+      "purpose": "US ticker master",
+      "ok": true,
+      "code": 200,
+      "ms": 440
+    },
+    {
+      "name": "screener.in",
+      "purpose": "India fundamentals",
+      "ok": true,
+      "code": 200,
+      "ms": 157
+    },
+    {
+      "name": "Trendlyne",
+      "purpose": "DVM / pledge",
+      "ok": true,
+      "code": 200,
+      "ms": 90
+    },
+    {
+      "name": "SGX",
+      "purpose": "SG universe",
+      "ok": true,
+      "code": 200,
+      "ms": 302
+    },
+    {
+      "name": "Euronext",
+      "purpose": "EU universe",
+      "ok": true,
+      "code": 200,
+      "ms": 1772
+    },
+    {
+      "name": "Eastmoney",
+      "purpose": "CN universe",
+      "ok": true,
+      "code": 200,
+      "ms": 2228
+    },
+    {
+      "name": "Moneycontrol RSS",
+      "purpose": "News",
+      "ok": true,
+      "code": 200,
+      "ms": 78
+    }
+  ],
+  "generated": "2026-07-02 21:40"
+}

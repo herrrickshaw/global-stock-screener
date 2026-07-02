@@ -1,0 +1,8 @@
+Repo Activity Dashboard — 2026-07-02
+Markets: IN, US
+Governance: 6/6 | Tests: 38 | Integrity files: 256
+Backlog: 21 done / 0 doing / 0 todo
+
+Open the HTML view for the full dashboard (tape, stock lists, coverage, backlog, activity).
+
+Research/education only. NOT investment advice.
