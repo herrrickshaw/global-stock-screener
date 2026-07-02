@@ -34,7 +34,6 @@ import pandas as pd
 
 warnings.filterwarnings("ignore")
 
-import datalink
 
 CACHE = Path(__file__).parent / "cache_seed" / "fundamentals"
 CACHE.mkdir(parents=True, exist_ok=True)
@@ -47,13 +46,97 @@ def _fetch_one(market: str, sym: str) -> dict:
 
         return fundamentals(sym) or {}
     if market == "IN":
-        try:
-            from screener_in_auth import company_financials
+        # Trendlyne first (P/E+ROE+... , higher throughput), then screener.in export,
+        # then yfinance .NS — first non-empty wins.
+        for src in (_in_trendlyne, _in_screener):
+            try:
+                d = src(sym)
+                if d:
+                    return d
+            except Exception:
+                continue
+        return _yf_fundamentals("IN", sym)
+    # all other markets → yfinance .info (trailing P/E, ROE, debt, growth)
+    return _yf_fundamentals(market, sym)
 
-            return company_financials(sym) or {}
-        except Exception:
-            return {}
-    return {}
+
+_TL_SESSION = None
+
+
+def _in_trendlyne(sym: str) -> dict:
+    """IN fundamentals via Trendlyne (cached login session)."""
+    global _TL_SESSION
+    from trendlyne_auth import fundamentals as tl_fundamentals
+    from trendlyne_auth import session
+
+    if _TL_SESSION is None:
+        _TL_SESSION = session()
+    return tl_fundamentals(sym, _TL_SESSION) or {}
+
+
+def _in_screener(sym: str) -> dict:
+    from screener_in_auth import company_financials
+
+    return company_financials(sym) or {}
+
+
+# yfinance suffix per market (query the right symbol)
+_YF_SUFFIX = {
+    "JP": ".T",
+    "KR": ".KS",
+    "CN": ".SS",
+    "SG": ".SI",
+    "EU": ".PA",
+    "HK": ".HK",
+    "TW": ".TW",
+    "CA": ".TO",
+    "AU": ".AX",
+    "UK": ".L",
+    "DE": ".DE",
+    "SA": ".SR",
+    "BR": ".SA",
+    "CH": ".SW",
+    "ZA": ".JO",
+    "SE": ".ST",
+    "FI": ".HE",
+    "DK": ".CO",
+}
+
+
+def _yf_fundamentals(market: str, sym: str) -> dict:
+    """Fundamentals from yfinance .info for a Yahoo-covered market. Maps to the same
+    keys the decision engine / P/E logic expect (pe, roe, debt_to_equity, …)."""
+    try:
+        import yfinance as yf
+
+        info = yf.Ticker(f"{sym}{_YF_SUFFIX.get(market, '')}").info
+    except Exception:
+        return {}
+    if not info:
+        return {}
+
+    def g(*keys):
+        for k in keys:
+            v = info.get(k)
+            if v not in (None, "") and not (isinstance(v, float) and v != v):
+                return v
+        return None
+
+    roe = g("returnOnEquity")
+    de = g("debtToEquity")
+    out = {
+        "source": "yfinance",
+        "pe": g("trailingPE", "forwardPE"),
+        "roe": roe * 100 if isinstance(roe, (int, float)) else None,
+        "debt_to_equity": de / 100 if isinstance(de, (int, float)) and de > 5 else de,
+        "net_income": g("netIncomeToCommon"),
+        "revenue": g("totalRevenue"),
+        "eps_ttm": g("trailingEps"),
+        "market_cap": g("marketCap"),
+        "gross_margin": (g("grossMargins") or 0) * 100 if g("grossMargins") else None,
+        "profit_growth": (g("earningsGrowth") or 0) * 100 if g("earningsGrowth") else None,
+    }
+    return {k: v for k, v in out.items() if v is not None}
 
 
 def _liquid_symbols(market: str, n: int) -> List[str]:
@@ -74,8 +157,9 @@ def _prices(market: str) -> Dict[str, float]:
     return dict(zip(df["Symbol"], df["Close"])) if not df.empty else {}
 
 
-def load_fundamentals(market: str, limit: int = 40, verbose: bool = True,
-                      symbols: Optional[List[str]] = None) -> pd.DataFrame:
+def load_fundamentals(
+    market: str, limit: int = 40, verbose: bool = True, symbols: Optional[List[str]] = None
+) -> pd.DataFrame:
     """Fetch fundamentals for `symbols` (else the top-`limit` liquid names) not yet
     cached, merge with the cache, and return a per-symbol fundamentals frame
     (+ price/market cap). `symbols` lets the pipeline target its filter-clearing
@@ -87,6 +171,7 @@ def load_fundamentals(market: str, limit: int = 40, verbose: bool = True,
     want = [s for s in pool if s not in have][:limit]
 
     rows: List[dict] = []
+    n_fetched = 0
 
     def _flush(buf):
         if not buf:
@@ -100,17 +185,18 @@ def load_fundamentals(market: str, limit: int = 40, verbose: bool = True,
         if f:
             f["Symbol"] = sym
             rows.append(f)
+            n_fetched += 1
         if market == "US":
             time.sleep(0.12)  # SEC politeness (<10 req/s)
         if (i + 1) % 25 == 0:
-            _flush(rows)          # checkpoint so progress is durable/resumable
+            _flush(rows)  # checkpoint so progress is durable/resumable
             rows = []
             if verbose:
                 print(f"  fetched {i+1}/{len(want)} …")
     _flush(rows)
     out = pd.read_parquet(path) if path.exists() else pd.DataFrame()
     if verbose:
-        print(f"  fundamentals[{market}]: +{len(want)} attempted, {len(out)} total cached")
+        print(f"  fundamentals[{market}]: +{n_fetched} fetched, {len(out)} total cached")
     # attach market cap from latest price × shares
     px = _prices(market)
     if not out.empty:
@@ -124,20 +210,29 @@ def load_fundamentals(market: str, limit: int = 40, verbose: bool = True,
 def _piotroski(r) -> int:
     """Piotroski F-score (0–9). A point is awarded only when the inputs it needs are
     present — missing data never earns a free point (avoids score inflation)."""
+
     def has(*ks):
-        return all(r.get(k) is not None and not (isinstance(r.get(k), float) and np.isnan(r[k]))
-                   for k in ks)
+        return all(
+            r.get(k) is not None and not (isinstance(r.get(k), float) and np.isnan(r[k]))
+            for k in ks
+        )
 
     s = 0
     s += has("net_income") and r["net_income"] > 0
     s += has("roa") and r["roa"] > 0
     s += has("cfo") and r["cfo"] > 0
-    s += has("cfo", "net_income") and r["cfo"] > r["net_income"]                # accrual
-    s += has("debt_to_assets", "debt_to_assets_prev") and r["debt_to_assets"] < r["debt_to_assets_prev"]
+    s += has("cfo", "net_income") and r["cfo"] > r["net_income"]  # accrual
+    s += (
+        has("debt_to_assets", "debt_to_assets_prev")
+        and r["debt_to_assets"] < r["debt_to_assets_prev"]
+    )
     s += has("current_ratio", "current_ratio_prev") and r["current_ratio"] > r["current_ratio_prev"]
-    s += has("shares", "shares_prev") and r["shares"] <= r["shares_prev"]       # no dilution
+    s += has("shares", "shares_prev") and r["shares"] <= r["shares_prev"]  # no dilution
     s += has("gross_margin", "gross_margin_prev") and r["gross_margin"] > r["gross_margin_prev"]
-    s += has("asset_turnover", "asset_turnover_prev") and r["asset_turnover"] > r["asset_turnover_prev"]
+    s += (
+        has("asset_turnover", "asset_turnover_prev")
+        and r["asset_turnover"] > r["asset_turnover_prev"]
+    )
     return int(s)
 
 
@@ -194,17 +289,17 @@ def _enrich(df: pd.DataFrame) -> pd.DataFrame:
 
 
 FUND_SCREENS: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
-    "piotroski_9":     lambda d: d["piotroski"] >= 8,
-    "high_roce":       lambda d: d["roce"] > 20,
-    "high_roe":        lambda d: d.get("roe", pd.Series(dtype=float)) > 20,
-    "debt_free":       lambda d: d.get("debt_to_equity", pd.Series(dtype=float)) < 0.1,
+    "piotroski_9": lambda d: d["piotroski"] >= 8,
+    "high_roce": lambda d: d["roce"] > 20,
+    "high_roe": lambda d: d.get("roe", pd.Series(dtype=float)) > 20,
+    "debt_free": lambda d: d.get("debt_to_equity", pd.Series(dtype=float)) < 0.1,
     "low_debt_equity": lambda d: d.get("debt_to_equity", pd.Series(dtype=float)) < 0.3,
-    "magic_formula":   lambda d: (d["earnings_yield"] > 8) & (d["roce"] > 15),
-    "fcf_yield":       lambda d: d["fcf_yield"] > 5,
-    "high_dividend":   lambda d: d["div_yield"] > 3,
-    "eps_growth":      lambda d: d.get("eps_growth", pd.Series(dtype=float)) > 15,
-    "coffee_can":      lambda d: (d.get("roe", pd.Series(dtype=float)) > 15)
-                                 & (d.get("debt_to_equity", pd.Series(dtype=float)) < 0.5),
+    "magic_formula": lambda d: (d["earnings_yield"] > 8) & (d["roce"] > 15),
+    "fcf_yield": lambda d: d["fcf_yield"] > 5,
+    "high_dividend": lambda d: d["div_yield"] > 3,
+    "eps_growth": lambda d: d.get("eps_growth", pd.Series(dtype=float)) > 15,
+    "coffee_can": lambda d: (d.get("roe", pd.Series(dtype=float)) > 15)
+    & (d.get("debt_to_equity", pd.Series(dtype=float)) < 0.5),
 }
 
 
@@ -238,14 +333,29 @@ def run_screen(name: str, market: str, limit: int = 40, top: Optional[int] = 25)
     sort = "roce" if name in ("high_roce", "magic_formula") else "piotroski"
     if sort in out.columns:
         out = out.sort_values(sort, ascending=False)
-    cols = [c for c in ["Symbol", "piotroski", "roce", "roe", "earnings_yield",
-                        "fcf_yield", "div_yield", "debt_to_equity", "eps_growth"] if c in out.columns]
+    cols = [
+        c
+        for c in [
+            "Symbol",
+            "piotroski",
+            "roce",
+            "roe",
+            "earnings_yield",
+            "fcf_yield",
+            "div_yield",
+            "debt_to_equity",
+            "eps_growth",
+        ]
+        if c in out.columns
+    ]
     out = out[cols]
     return out.head(top).reset_index(drop=True) if top else out.reset_index(drop=True)
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Run fundamental Screener.in formulas on real financials")
+    ap = argparse.ArgumentParser(
+        description="Run fundamental Screener.in formulas on real financials"
+    )
     ap.add_argument("--market", default="US")
     ap.add_argument("--screen", help="run one fundamental screen")
     ap.add_argument("--limit", type=int, default=40, help="max new symbols to fetch this run")
