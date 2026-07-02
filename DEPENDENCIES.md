@@ -18,7 +18,7 @@ missed — treat §1/§2 (imports) as exact.
 | `build_mailer` | `run`, `send_mailer` |
 | `custom_screener` | `run_global_analysis`, `screener_kit` |
 | `daily_brief` | `api`, `morning_mailer`, `repo_dashboard` |
-| `data_sources` | `deepen_ltm`, `fetch_market_ohlc`, `market_memory`, `market_performance`, `screener_kit` |
+| `data_sources` | `deepen_ltm`, `fetch_market_ohlc`, `market_memory`, `market_performance`, `pipeline_runner`, `screener_kit` |
 | `datalink` | `auto_screener`, `backtest`, `daily_brief`, `deepen_ltm`, `export_company_list`, `ml_supervised`, `pipeline`, `rl_trader`, `screen_metrics`, `screener_kit`, `serving_layer`, `update_bhavcopy_daily` |
 | `decision_engine` | `portfolio_evaluator` |
 | `decisions` | `repo_dashboard` |
@@ -98,7 +98,7 @@ missed — treat §1/§2 (imports) as exact.
 | `name_matcher` | `symbol_master` |
 | `pattern_discovery` | `stock_utils` |
 | `pipeline` | `auto_screener`, `datalink`, `fundamental_metrics`, `market_memory`, `screen_metrics`, `validation` |
-| `pipeline_runner` | `api_health`, `governance`, `integrity`, `market_memory`, `news_feeds`, `serving_layer` |
+| `pipeline_runner` | `api_health`, `data_sources`, `governance`, `integrity`, `market_memory`, `news_feeds`, `serving_layer` |
 | `portfolio_analytics` | `portfolio_evaluator`, `sector_map` |
 | `portfolio_evaluator` | `decision_engine`, `delivery_signal`, `fundamental_metrics`, `name_matcher`, `screen_metrics`, `serving_layer`, `ticker_aliases`, `validation` |
 | `preflight` | `market_memory`, `serving_layer` |
