@@ -104,8 +104,15 @@ Format per record:
   - **Impact** — no secret has entered version control; enforced by CI.
   - **Alternatives** — a secrets manager (overkill for a solo local repo).
 
-- **ADR-16 — Stooq-first OHLC chain + optional EODHD; no Bloomberg/Groww** `accepted` (2026-07-02)
+- **ADR-16 — Stooq-first OHLC chain + optional EODHD; no Bloomberg/Groww** `superseded` (2026-07-02)
   - **Context** — Yahoo/yfinance now 429-rate-limits anonymous access, the dominant cost of the daily run. Evaluated broker/terminal data (Groww, Bloomberg).
   - **Decision** — reorder the `data_sources.fetch` chain to stooq → eodhd → yahoo (Yahoo last); add an optional `EODHD_API_KEY` provider (20+ exchanges) that is dormant when unkeyed. Reject Bloomberg (≈$28k/yr, license bars committing/redistributing data, needs a live Terminal) and Groww (India-only, EOD already covered by free bhavcopy).
   - **Impact** — Yahoo 429s stop gating the run; the stack stays $0 by default; a ~$100/yr EODHD key is a one-line upgrade path that preserves the offline-first, LFS-versioned design. India EOD stays on bhavcopy.
   - **Alternatives** — Bloomberg/Refinitiv (cost + licensing incompatible with an open, LFS-committed repo); Groww (India-only, no gain over bhavcopy for EOD); Polygon/Tiingo/Norgate (viable equivalents to EODHD).
+  - **Superseded by** — [[ADR-17]] after live evidence showed Stooq-first added no coverage.
+
+- **ADR-17 — Yahoo-only default OHLC chain (Stooq/EODHD opt-in)** `accepted` (2026-07-02)
+  - **Context** — the first full live run under ADR-16 recorded Stooq filling **0/9,278** tickers (Stooq HTML/rate-limits bulk EOD) while Yahoo carried 100% (9,247/9,278, 99.7%). Stooq-first only added latency to a ~41-min data-update stage.
+  - **Decision** — set the `data_sources.fetch` default order to `("yahoo",)`. Stooq and EODHD remain available via the `order=` argument (e.g. `("yahoo", "eodhd")`), so re-enabling a fallback is a one-liner.
+  - **Impact** — removes the useless Stooq probe; behaviour matches reality (Yahoo is the only working keyless OHLC source). Tradeoff: **no automatic fallback if Yahoo 429s hard** — the mitigation is adding an `EODHD_API_KEY` and switching the default to `("yahoo", "eodhd")`. The ⏱️ fill-rate card + 90% red-flag remain the trip-wire.
+  - **Alternatives** — keep Stooq-first (empirically 0 fill); Yahoo+EODHD default now (deferred until a key exists).
