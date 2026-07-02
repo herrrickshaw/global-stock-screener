@@ -24,12 +24,17 @@ exec >>"$LOG" 2>&1
 echo "===== $(date '+%F %T')  morning dashboard: ${BRANCH} ====="
 
 cd "$REPO"
+# committer identity + skip the flaky LFS lock-verify API on push (unattended run)
+git config user.name  >/dev/null 2>&1 || git config user.name  "herrrickshaw"
+git config user.email >/dev/null 2>&1 || git config user.email "umashankartd1991@gmail.com"
+git config lfs.locksverify false
 git fetch origin --quiet
 
 # fresh worktree on a new dated branch off the latest mailer branch
 rm -rf "$WT"
 git worktree add -B "$BRANCH" "$WT" origin/mailer
 cd "$WT"
+git config lfs.locksverify false
 
 # build + send (or save HTML if no creds); non-fatal if the mailer hiccups
 "$PYTHON" repo_dashboard.py --market IN US || echo "  dashboard build reported an issue (continuing)"
@@ -46,8 +51,17 @@ git add -A
 git add -A
 
 git commit -m "chore(dashboard): snapshot ${DATE}" || echo "  nothing to commit"
-git push -u origin "$BRANCH" --force
+
+# push with a few retries — the LFS lock API / network can time out transiently
+for attempt in 1 2 3; do
+    if git push -u origin "$BRANCH" --force; then
+        echo "  pushed on attempt ${attempt}"
+        break
+    fi
+    echo "  push attempt ${attempt} failed; retrying in 20s"
+    sleep 20
+done
 
 cd "$REPO"
 git worktree remove --force "$WT"
-echo "  done: pushed ${BRANCH}"
+echo "  done: ${BRANCH}"
