@@ -87,7 +87,13 @@ def _check_ci_governance() -> Tuple[bool, str]:  # P10
 
 
 def _check_docs() -> Tuple[bool, str]:  # P9 explainability / EA content
-    need = ["TOGAF.md", "DATA_SCHEMA_AND_ARCHITECTURE.md", "SECURITY.md", "DATA_SOURCES.md"]
+    need = [
+        "TOGAF.md",
+        "DATA_SCHEMA_AND_ARCHITECTURE.md",
+        "SECURITY.md",
+        "DATA_SOURCES.md",
+        "DECISIONS.md",
+    ]
     missing = [d for d in need if not (HERE / d).exists()]
     return (not missing, "EA content docs present" if not missing else f"missing docs: {missing}")
 

@@ -20,6 +20,7 @@ missed — treat §1/§2 (imports) as exact.
 | `data_sources` | `deepen_ltm`, `fetch_market_ohlc`, `market_memory`, `market_performance`, `screener_kit` |
 | `datalink` | `auto_screener`, `backtest`, `daily_brief`, `deepen_ltm`, `export_company_list`, `ml_supervised`, `pipeline`, `rl_trader`, `screen_metrics`, `screener_kit`, `serving_layer`, `update_bhavcopy_daily` |
 | `decision_engine` | `portfolio_evaluator` |
+| `decisions` | `repo_dashboard` |
 | `delivery_signal` | `portfolio_evaluator` |
 | `frames` | `bhavcopy_history`, `bhavcopy_store`, `build_market_seeds`, `datalink`, `deepen_ltm`, `fetch_market_ohlc`, `market_memory`, `screener_kit`, `serving_layer` |
 | `full_european_market_scan` | `fetch_market_ohlc`, `universe_sources` |
@@ -101,7 +102,7 @@ missed — treat §1/§2 (imports) as exact.
 | `portfolio_evaluator` | `decision_engine`, `delivery_signal`, `fundamental_metrics`, `name_matcher`, `screen_metrics`, `serving_layer`, `ticker_aliases`, `validation` |
 | `preflight` | `market_memory`, `serving_layer` |
 | `public_screens` | `screener_in` |
-| `repo_dashboard` | `auto_screener`, `backlog`, `daily_brief`, `governance`, `market_memory`, `morning_mailer`, `news_feeds`, `send_mailer` |
+| `repo_dashboard` | `auto_screener`, `backlog`, `daily_brief`, `decisions`, `governance`, `market_memory`, `morning_mailer`, `news_feeds`, `send_mailer` |
 | `rl_trader` | `auto_screener`, `datalink`, `ml_supervised` |
 | `run` | `bhavcopy_store`, `build_mailer`, `run_global_analysis`, `screener_kit`, `strategies` |
 | `run_global_analysis` | `custom_screener`, `screener_kit`, `strategies` |
