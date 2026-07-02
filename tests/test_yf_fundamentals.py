@@ -19,7 +19,8 @@ def test_yf_mapping(monkeypatch):
         def __init__(self, *a, **k):
             self.info = fake
 
-    import types, sys
+    import sys
+    import types
 
     monkeypatch.setitem(sys.modules, "yfinance", types.SimpleNamespace(Ticker=_T))
     out = fm._yf_fundamentals("EU", "MT.AS")
@@ -35,7 +36,8 @@ def test_yf_empty_info(monkeypatch):
         def __init__(self, *a, **k):
             self.info = {}
 
-    import types, sys
+    import sys
+    import types
 
     monkeypatch.setitem(sys.modules, "yfinance", types.SimpleNamespace(Ticker=_T))
     assert fm._yf_fundamentals("EU", "X.PA") == {}
