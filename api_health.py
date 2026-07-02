@@ -35,6 +35,12 @@ ENDPOINTS: Dict[str, Dict[str, str]] = {
     "SEC XBRL": {
         "purpose": "US fundamentals",
         "url": "https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/Assets.json",
+        "ua": "market-research umashankartd1991@gmail.com",  # SEC requires a contact UA
+    },
+    "SEC tickers": {
+        "purpose": "US ticker master",
+        "url": "https://www.sec.gov/files/company_tickers.json",
+        "ua": "market-research umashankartd1991@gmail.com",  # 403s on a generic browser UA
     },
     "screener.in": {"purpose": "India fundamentals", "url": "https://www.screener.in/"},
     "Trendlyne": {"purpose": "DVM / pledge", "url": "https://trendlyne.com/"},
@@ -48,11 +54,11 @@ ENDPOINTS: Dict[str, Dict[str, str]] = {
 }
 
 
-def _probe_one(name: str, purpose: str, url: str, timeout: int) -> dict:
+def _probe_one(name: str, purpose: str, url: str, timeout: int, ua: str = "") -> dict:
     t = time.time()
     try:
         req = urllib.request.Request(
-            url, headers={"User-Agent": UA, "From": "screener@example.com"}
+            url, headers={"User-Agent": ua or UA, "From": "screener@example.com"}
         )
         with urllib.request.urlopen(req, timeout=timeout) as r:
             r.read(256)
@@ -80,7 +86,12 @@ def probe(timeout: int = 6, max_workers: int = 8) -> List[dict]:
     items = list(ENDPOINTS.items())
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         results = list(
-            ex.map(lambda kv: _probe_one(kv[0], kv[1]["purpose"], kv[1]["url"], timeout), items)
+            ex.map(
+                lambda kv: _probe_one(
+                    kv[0], kv[1]["purpose"], kv[1]["url"], timeout, kv[1].get("ua", "")
+                ),
+                items,
+            )
         )
     return results
 
