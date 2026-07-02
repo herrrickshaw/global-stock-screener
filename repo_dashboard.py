@@ -179,11 +179,34 @@ def _backlog_table() -> str:
     )
 
 
-def _challenges(markets: List[str], metrics: dict) -> str:
+def _challenges(markets: List[str], metrics: dict, status: Optional[dict] = None) -> str:
     """Actionable issues surfaced from the aggregated state."""
     issues: List[str] = []
     for name in metrics.get("gov_fail", []):
         issues.append(f"🔴 Governance non-conformance: <b>{name}</b>")
+
+    # pipeline + code-health failures from the last orchestrated run
+    status = status or {}
+    for key, label in [
+        ("data_update", "Data update"),
+        ("scans", "Scans"),
+        ("pipeline", "Pipeline"),
+    ]:
+        sec = status.get(key)
+        if isinstance(sec, dict) and sec.get("ok") is False:
+            issues.append(f"🔴 {label} failed: {sec.get('detail', '')}")
+    ch = status.get("code_health")
+    if isinstance(ch, dict):
+        for key, label in [
+            ("lint", "Lint"),
+            ("tests", "Tests"),
+            ("governance", "Governance/integrity"),
+            ("imports", "Import smoke"),
+        ]:
+            sec = ch.get(key)
+            if isinstance(sec, dict) and sec.get("ok") is False:
+                issues.append(f"🔴 Code check failed — {label}: {sec.get('detail', '')}")
+
     if metrics.get("todo", 0):
         issues.append(f"🟠 {metrics['todo']} backlog item(s) still open (see backlog card)")
     # data staleness / gaps
@@ -238,6 +261,101 @@ def _recent_activity(n: int = 12) -> str:
     )
 
 
+def _load_status() -> dict:
+    """Read results/pipeline_status.json written by the daily orchestrator, if present."""
+    import json
+
+    p = RESULTS / "pipeline_status.json"
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return {}
+
+
+def _pipeline_execution(status: dict) -> str:
+    """Card: did last run's data-update + scans + steps execute cleanly?"""
+    if not status:
+        return "<p style='color:#999'>No pipeline run recorded yet (orchestrator has not run).</p>"
+    rows = ["<tr><th>Stage</th><th>Status</th><th>Detail</th></tr>"]
+    order = ["data_update", "scans", "pipeline"]
+    labels = {"data_update": "Data update", "scans": "Scans", "pipeline": "Pipeline steps"}
+    for key in order:
+        sec = status.get(key)
+        if not isinstance(sec, dict):
+            continue
+        ok = sec.get("ok")
+        badge = "✅" if ok else "🔴"
+        rows.append(
+            f"<tr><td>{labels.get(key, key)}</td><td>{badge}</td>"
+            f"<td>{sec.get('detail', '')}</td></tr>"
+        )
+    gen = status.get("generated", "")
+    tail = f"<p style='font-size:11px;color:#888'>last run: {gen}</p>" if gen else ""
+    return (
+        "<table border=1 cellpadding=4 style='border-collapse:collapse'>"
+        + "".join(rows)
+        + "</table>"
+        + tail
+    )
+
+
+def _code_health(status: dict) -> str:
+    """Card: lint / tests / governance+integrity / import-smoke from the last run."""
+    ch = status.get("code_health") if status else None
+    if not isinstance(ch, dict):
+        return "<p style='color:#999'>No code-health run recorded yet.</p>"
+    rows = ["<tr><th>Check</th><th>Status</th><th>Detail</th></tr>"]
+    for key, label in [
+        ("lint", "Lint (ruff/black)"),
+        ("tests", "Tests (pytest)"),
+        ("governance", "Governance + integrity"),
+        ("imports", "Import smoke"),
+    ]:
+        sec = ch.get(key)
+        if not isinstance(sec, dict):
+            continue
+        badge = "✅" if sec.get("ok") else "🔴"
+        rows.append(f"<tr><td>{label}</td><td>{badge}</td><td>{sec.get('detail', '')}</td></tr>")
+    return (
+        "<table border=1 cellpadding=4 style='border-collapse:collapse'>"
+        + "".join(rows)
+        + "</table>"
+    )
+
+
+def _news_mood(markets: List[str], status: dict) -> str:
+    """Card: Talk-on-the-Street breadth per market. Prefers the run's captured
+    mood; else fetches live via news_feeds (best-effort)."""
+    captured = (status or {}).get("news") or {}
+    out = []
+    for m in markets:
+        data = captured.get(m)
+        if not data:
+            try:
+                import news_feeds
+
+                data = news_feeds.market_mood(m)
+            except Exception:
+                data = {}
+        if not data:
+            out.append(f"<p><b>{m}</b>: news feed unavailable</p>")
+            continue
+        mood = data.get("mood", "n/a")
+        score = data.get("score")
+        color = {"POSITIVE": "#2e7d32", "NEGATIVE": "#c62828"}.get(mood, "#555")
+        oc = data.get("outlet_counts", {})
+        outlets = ", ".join(f"{k} ({v})" for k, v in oc.items()) if oc else "—"
+        score_txt = f" ({score:+.2f})" if isinstance(score, (int, float)) else ""
+        out.append(
+            f"<p><b>{m}</b> — mood: <b style='color:{color}'>{mood}</b>{score_txt} "
+            f"from {data.get('n_articles', 0)} articles<br>"
+            f"<span style='font-size:12px;color:#666'>{outlets}</span></p>"
+        )
+    return "".join(out)
+
+
 # ── assembly ────────────────────────────────────────────────────────────────
 def assemble(markets: Optional[List[str]] = None) -> Tuple[str, str, str]:
     """Return (subject, text, html) for the repo activity dashboard."""
@@ -246,6 +364,7 @@ def assemble(markets: Optional[List[str]] = None) -> Tuple[str, str, str]:
     subject = f"📊 Repo Activity Dashboard — {today}"
 
     kpi_html, metrics = _kpis(markets)
+    status = _load_status()
 
     body = [
         "<html><body style='font-family:sans-serif;max-width:820px;margin:0 auto'>",
@@ -254,9 +373,18 @@ def assemble(markets: Optional[List[str]] = None) -> Tuple[str, str, str]:
         kpi_html,
         _card(
             "⚠️ Challenges &amp; Alerts",
-            _safe(lambda: _challenges(markets, metrics), "challenges unavailable"),
+            _safe(lambda: _challenges(markets, metrics, status), "challenges unavailable"),
         ),
+        _card(
+            "⚙️ Pipeline Execution",
+            _safe(lambda: _pipeline_execution(status), "pipeline status unavailable"),
+        ),
+        _card("🐛 Code Health", _safe(lambda: _code_health(status), "code health unavailable")),
         _card("🗞️ Market Tape", _safe(lambda: _market_tape(markets), "tape unavailable")),
+        _card(
+            "📰 Talk on the Street (news mood)",
+            _safe(lambda: _news_mood(markets, status), "news mood unavailable"),
+        ),
         _card(
             "📈 Today's Stock Lists",
             _safe(lambda: _stock_lists(markets), "stock lists unavailable"),
