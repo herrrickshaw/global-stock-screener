@@ -196,7 +196,25 @@ def yahoo_fetch(
     return _yahoo_bulk(tickers, period=period, batch_size=80, min_bars=min_bars, verbose=verbose)
 
 
-SOURCES = {"stooq": stooq_fetch, "eodhd": eodhd_fetch, "yahoo": yahoo_fetch}
+def groww_fetch(
+    tickers: List[str], period: str = "1y", min_bars: int = 60, verbose: bool = True
+) -> Dict[str, pd.DataFrame]:
+    """Groww API (India) daily OHLC — opt-in. Dormant without keys / market-data
+    entitlement (returns {} on 403). See groww_source.py."""
+    try:
+        import groww_source
+
+        return groww_source.fetch(tickers, period=period, min_bars=min_bars, verbose=verbose)
+    except Exception:
+        return {}
+
+
+SOURCES = {
+    "stooq": stooq_fetch,
+    "eodhd": eodhd_fetch,
+    "yahoo": yahoo_fetch,
+    "groww": groww_fetch,
+}
 
 
 def fetch(
@@ -220,7 +238,7 @@ def fetch(
         if verbose:
             print(f"  source '{src}': attempting {len(pending)} tickers …")
         kw = dict(min_bars=min_bars, verbose=verbose)
-        if src in ("yahoo", "eodhd"):
+        if src in ("yahoo", "eodhd", "groww"):
             kw["period"] = period
         got = fn(pending, **kw)
         per_source[src] = len(got)
