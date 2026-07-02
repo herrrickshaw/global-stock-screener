@@ -207,6 +207,13 @@ def _challenges(markets: List[str], metrics: dict, status: Optional[dict] = None
             if isinstance(sec, dict) and sec.get("ok") is False:
                 issues.append(f"🔴 Code check failed — {label}: {sec.get('detail', '')}")
 
+    # data-acquisition APIs that are down
+    api = status.get("api_health")
+    if isinstance(api, list):
+        down = [r.get("name") for r in api if isinstance(r, dict) and not r.get("ok")]
+        if down:
+            issues.append(f"🔴 API down: {', '.join(str(d) for d in down)}")
+
     if metrics.get("todo", 0):
         issues.append(f"🟠 {metrics['todo']} backlog item(s) still open (see backlog card)")
     # data staleness / gaps
@@ -235,6 +242,38 @@ def _challenges(markets: List[str], metrics: dict, status: Optional[dict] = None
     if not issues:
         return "<p>✅ No open challenges — all green.</p>"
     return "<ul>" + "".join(f"<li>{i}</li>" for i in issues) + "</ul>"
+
+
+def _api_health(status: dict) -> str:
+    """Card: reachability of data-acquisition APIs. Prefers the run's captured
+    probe; else probes live (best-effort)."""
+    results = (status or {}).get("api_health")
+    if not results:
+        try:
+            import api_health
+
+            results = api_health.probe()
+        except Exception:
+            results = None
+    if not results:
+        return "<p style='color:#999'>No API probe recorded yet.</p>"
+    up = sum(1 for r in results if r.get("ok"))
+    rows = ["<tr><th>API</th><th>Purpose</th><th>Status</th><th>HTTP</th><th>Latency</th></tr>"]
+    for r in results:
+        badge = "✅" if r.get("ok") else "🔴"
+        ms = r.get("ms")
+        lat = f"{ms} ms" if isinstance(ms, int) else "—"
+        rows.append(
+            f"<tr><td><b>{r.get('name', '')}</b></td><td>{r.get('purpose', '')}</td>"
+            f"<td>{badge}</td><td>{r.get('code', '')}</td><td>{lat}</td></tr>"
+        )
+    head = f"<p style='margin:0 0 6px'>{up}/{len(results)} sources up</p>"
+    return (
+        head
+        + "<table border=1 cellpadding=4 style='border-collapse:collapse'>"
+        + "".join(rows)
+        + "</table>"
+    )
 
 
 def _decision_register(n: int = 8) -> str:
@@ -413,6 +452,7 @@ def assemble(markets: Optional[List[str]] = None) -> Tuple[str, str, str]:
             "📈 Today's Stock Lists",
             _safe(lambda: _stock_lists(markets), "stock lists unavailable"),
         ),
+        _card("🔌 API Health", _safe(lambda: _api_health(status), "api health unavailable")),
         _card("💾 Data Coverage", _safe(lambda: _data_coverage(markets), "coverage unavailable")),
         _card("🧭 SAFe Backlog (open, WSJF-ranked)", _safe(_backlog_table, "backlog unavailable")),
         _card(

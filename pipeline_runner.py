@@ -121,12 +121,22 @@ def _pipeline_health(markets: List[str]) -> dict:
         return {"ok": False, "detail": f"status error: {str(e)[:80]}"}
 
 
+def _api_health() -> list:
+    try:
+        import api_health
+
+        return api_health.probe()
+    except Exception:
+        return []
+
+
 def stage_scan(markets: List[str], repo: Path, out_dir: Path) -> dict:
     status = _read_status(out_dir)
     status["data_update"] = _data_update(markets)
     status["scans"] = _run_scans(markets, repo)
     status["pipeline"] = _pipeline_health(markets)
     status["news"] = _news(markets)
+    status["api_health"] = _api_health()
     _write_status(out_dir, status)
     return status
 
