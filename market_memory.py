@@ -46,7 +46,7 @@ SEED_DIR = Path(__file__).parent / "cache_seed"
 LTM_DIR = SEED_DIR / "ltm"
 LTM_DIR.mkdir(parents=True, exist_ok=True)
 
-LTM_YEARS = 5  # long-term memory window
+LTM_YEARS = 10  # long-term memory window (widened for deep backtest history)
 STM_YEARS = 1  # short-term (hot) window
 
 MARKETS = [
