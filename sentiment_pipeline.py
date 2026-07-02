@@ -459,11 +459,18 @@ class IndianRSSProvider(NewsProvider):
     env_key = ""  # no key needed
     min_interval = 0.5
 
+    # Browser UA — several outlets 403 an unidentified client.
+    UA = (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120 Safari/537.36"
+    )
+
     FEEDS = {
         "Moneycontrol": [
             "https://www.moneycontrol.com/rss/business.xml",
             "https://www.moneycontrol.com/rss/results.xml",
             "https://www.moneycontrol.com/rss/marketreports.xml",
+            "https://www.moneycontrol.com/rss/economy.xml",
         ],
         "EconomicTimes": [
             "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
@@ -471,9 +478,14 @@ class IndianRSSProvider(NewsProvider):
         ],
         "BusinessLine": [
             "https://www.thehindubusinessline.com/markets/feeder/default.rss",
+            "https://www.thehindubusinessline.com/companies/feeder/default.rss",
         ],
         "LiveMint": [
             "https://www.livemint.com/rss/markets",
+            "https://www.livemint.com/rss/companies",
+        ],
+        "NDTVProfit": [
+            "https://feeds.feedburner.com/ndtvprofit-latest",
         ],
     }
 
@@ -501,7 +513,7 @@ class IndianRSSProvider(NewsProvider):
             for url in urls:
                 try:
                     self._throttle()
-                    d = feedparser.parse(url)
+                    d = feedparser.parse(url, agent=self.UA)
                     self._feed_cache[url] = [
                         {
                             "title": e.get("title", ""),
@@ -618,6 +630,24 @@ class USRSSProvider(IndianRSSProvider):
             "https://feeds.content.dowjones.io/public/rss/mw_topstories",
             "https://feeds.content.dowjones.io/public/rss/mw_marketpulse",
             "https://feeds.content.dowjones.io/public/rss/mw_bulletins",
+        ],
+        "WSJ": [
+            "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain",
+        ],
+        "YahooFinance": [
+            "https://finance.yahoo.com/news/rssindex",
+        ],
+        "SeekingAlpha": [
+            "https://seekingalpha.com/market_currents.xml",
+        ],
+        "Nasdaq": [
+            "https://www.nasdaq.com/feed/rssoutbound?category=Markets",
+        ],
+        "Benzinga": [
+            "https://www.benzinga.com/feed",
+        ],
+        "Investing": [
+            "https://www.investing.com/rss/news_25.rss",
         ],
     }
 
