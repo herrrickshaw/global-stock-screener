@@ -4,15 +4,15 @@
 # Redundant OHLC sourcing with an ordered fallback chain, so a Yahoo Finance
 # rate-limit (429 / "Invalid Crumb") no longer breaks data collection.
 #
-# Chain (first that returns data for a ticker wins) — Stooq-first to sidestep
-# Yahoo's tightening anonymous rate limits (429), with an optional keyed source:
-#   1. Stooq        — free, no key, global EOD CSV (https://stooq.com)         [primary]
-#   2. EODHD        — optional, one key (EODHD_API_KEY); 20+ exchanges         [keyed fill]
-#   3. Yahoo        — yfinance bulk download                                   [fallback]
+# Default chain is Yahoo-only: a live run showed Stooq filling 0/9278 (it HTML/
+# rate-limits bulk EOD), so it added latency without coverage. Yahoo carried 100%.
+# Stooq and the optional keyed EODHD provider remain available — pass e.g.
+# order=("yahoo", "eodhd") or ("stooq", "yahoo") to re-enable fallbacks.
+#   - Yahoo   — yfinance bulk download                                    [default]
+#   - EODHD   — optional, one key (EODHD_API_KEY); 20+ exchanges          [opt-in]
+#   - Stooq   — free, no key, global EOD CSV                              [opt-in]
 #   (India is sourced separately from official NSE/BSE bhavcopy — see
 #    bhavcopy_history.py — and does not go through this chain.)
-#
-# EODHD is dormant unless EODHD_API_KEY is set, so the default stack stays $0.
 #
 # fetch() runs the requested order, collects misses after each source, and tries
 # the next source only for the still-missing tickers. Returns {ticker: OHLCV df}.
@@ -201,7 +201,7 @@ SOURCES = {"stooq": stooq_fetch, "eodhd": eodhd_fetch, "yahoo": yahoo_fetch}
 
 def fetch(
     tickers: List[str],
-    order=("stooq", "eodhd", "yahoo"),
+    order=("yahoo",),
     period: str = "1y",
     min_bars: int = 60,
     verbose: bool = True,
