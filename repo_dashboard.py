@@ -29,6 +29,9 @@ RESULTS = HERE / "results"
 RESULTS.mkdir(exist_ok=True)
 COMBINED_DIR = HERE / "combined_report_results"
 
+# Flag a red Challenge when OHLC sources fill less than this share of the universe.
+FILL_RATE_MIN = 0.90
+
 
 # ── section builders (each returns an HTML fragment; never raises) ──────────────
 def _safe(fn, fallback: str) -> str:
@@ -213,6 +216,18 @@ def _challenges(markets: List[str], metrics: dict, status: Optional[dict] = None
         down = [r.get("name") for r in api if isinstance(r, dict) and not r.get("ok")]
         if down:
             issues.append(f"🔴 API down: {', '.join(str(d) for d in down)}")
+
+    # OHLC fill rate below threshold → sources aren't covering the universe
+    fill = status.get("source_fill")
+    if isinstance(fill, dict):
+        req = fill.get("requested") or 0
+        got = fill.get("filled") or 0
+        if req and (got / req) < FILL_RATE_MIN:
+            pct = round(100 * got / req)
+            issues.append(
+                f"🔴 OHLC fill low: {got}/{req} ({pct}%) — sources under-covering; "
+                f"consider an EODHD key (ADR-16)"
+            )
 
     if metrics.get("todo", 0):
         issues.append(f"🟠 {metrics['todo']} backlog item(s) still open (see backlog card)")
