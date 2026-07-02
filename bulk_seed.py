@@ -32,6 +32,7 @@ _COL_ALIASES = {
     "ticker": "Symbol",
     "tckrsymb": "Symbol",
     "date": "Date",
+    "datetime": "Date",
     "timestamp": "Date",
     "trade_date": "Date",
     "traddt": "Date",
@@ -63,7 +64,9 @@ def _normalise(df: pd.DataFrame) -> pd.DataFrame:
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     for c in ["Open", "High", "Low", "Close", "Volume"]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
-    df["Symbol"] = df["Symbol"].astype(str).str.strip().str.upper()
+    df["Symbol"] = (
+        df["Symbol"].astype(str).str.strip().str.upper().str.replace(r"^(NSE|BSE):", "", regex=True)
+    )
     return df.dropna(subset=["Date", "Close", "Symbol"])
 
 
