@@ -10,6 +10,7 @@ missed — treat §1/§2 (imports) as exact.
 
 | Module | Directly imported by (fix these if you change it) |
 |--------|----------------------------------------------------|
+| `api_health` | `pipeline_runner`, `repo_dashboard` |
 | `auto_screener` | `morning_mailer`, `pipeline`, `repo_dashboard`, `rl_trader`, `validation` |
 | `backlog` | `repo_dashboard` |
 | `bhavcopy_history` | `screener_kit`, `universe_sources`, `update_bhavcopy_daily` |
@@ -97,12 +98,12 @@ missed — treat §1/§2 (imports) as exact.
 | `name_matcher` | `symbol_master` |
 | `pattern_discovery` | `stock_utils` |
 | `pipeline` | `auto_screener`, `datalink`, `fundamental_metrics`, `market_memory`, `screen_metrics`, `validation` |
-| `pipeline_runner` | `governance`, `integrity`, `market_memory`, `news_feeds`, `serving_layer` |
+| `pipeline_runner` | `api_health`, `governance`, `integrity`, `market_memory`, `news_feeds`, `serving_layer` |
 | `portfolio_analytics` | `portfolio_evaluator`, `sector_map` |
 | `portfolio_evaluator` | `decision_engine`, `delivery_signal`, `fundamental_metrics`, `name_matcher`, `screen_metrics`, `serving_layer`, `ticker_aliases`, `validation` |
 | `preflight` | `market_memory`, `serving_layer` |
 | `public_screens` | `screener_in` |
-| `repo_dashboard` | `auto_screener`, `backlog`, `daily_brief`, `decisions`, `governance`, `market_memory`, `morning_mailer`, `news_feeds`, `send_mailer` |
+| `repo_dashboard` | `api_health`, `auto_screener`, `backlog`, `daily_brief`, `decisions`, `governance`, `market_memory`, `morning_mailer`, `news_feeds`, `send_mailer` |
 | `rl_trader` | `auto_screener`, `datalink`, `ml_supervised` |
 | `run` | `bhavcopy_store`, `build_mailer`, `run_global_analysis`, `screener_kit`, `strategies` |
 | `run_global_analysis` | `custom_screener`, `screener_kit`, `strategies` |
