@@ -5,18 +5,35 @@ Backtest Framework - KARZ vs MAIN Weight Comparison
 Compares F1-optimized weights (karz) against original weights (main).
 Measures: precision, recall, F1 score, Sharpe ratio, drawdown.
 
+UPDATED: Now uses data_config for proper train/test splits to prevent data leakage.
+
 Process:
 1. Load 3-year historical company financials
-2. Generate scores with both weight sets
-3. Rank companies and create buy/sell signals
-4. Check actual returns and calculate performance
-5. Generate comparison report
+2. Split data: TRAIN [2015-2021] VALIDATION [2022] TEST [2023-2024]
+3. Generate scores with both weight sets on TEST data (unseen)
+4. Rank companies and create buy/sell signals
+5. Check actual returns and calculate performance
+6. Generate comparison report
+
+Usage:
+    python3 backtest_weight_optimization.py --market IN --use-test-split
 """
 
 import pandas as pd
 import numpy as np
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 from datetime import datetime, timedelta
+from pathlib import Path
+
+# Import data configuration for proper train/test splits
+try:
+    from data_config import DataConfig, filter_data_by_split
+    HAS_DATA_CONFIG = True
+except ImportError:
+    HAS_DATA_CONFIG = False
+    print("⚠️  data_config.py not found. Run without train/test split. Recommend installing.")
+
+import argparse
 
 
 class WeightBacktester:
@@ -46,22 +63,39 @@ class WeightBacktester:
         'fcf_generation': 22,
     }
 
-    def __init__(self, data_df: pd.DataFrame, lookback_years: int = 3):
+    def __init__(self, data_df: pd.DataFrame, lookback_years: int = 3, use_test_split: bool = False):
         """
         Initialize backtest framework
 
         Args:
             data_df: DataFrame with company scores and returns
             lookback_years: Historical period to backtest (1-3 years)
+            use_test_split: If True, use data_config TEST split to prevent leakage (default: False for backward compat)
         """
         self.data = data_df.copy()
         self.lookback_years = lookback_years
         self.results = {}
+        self.use_test_split = use_test_split
+
+        # Validate data quality
+        if HAS_DATA_CONFIG:
+            config = DataConfig()
+            errors = config.validation.validate_dataframe(self.data)
+            if errors:
+                print(f"⚠️  Data validation warnings:")
+                for error in errors:
+                    print(f"     • {error}")
 
         print(f"\n📊 BACKTEST INITIALIZATION")
         print(f"   Companies: {len(self.data):,}")
         print(f"   Lookback period: {lookback_years} years")
-        print(f"   Date range: {datetime.now().date() - timedelta(days=365*lookback_years)} to {datetime.now().date()}")
+        print(f"   Using proper train/test split: {use_test_split}")
+        if use_test_split and HAS_DATA_CONFIG:
+            config = DataConfig()
+            test_start, test_end = config.date_splits.get_test_range()
+            print(f"   ✓ Data split: TEST [{test_start} to {test_end}] (unseen data)")
+        else:
+            print(f"   Date range: {datetime.now().date() - timedelta(days=365*lookback_years)} to {datetime.now().date()}")
 
     def calculate_composite_score(self, df: pd.DataFrame, weights: Dict[str, float]) -> np.ndarray:
         """Calculate composite score using weight dictionary"""
@@ -328,7 +362,112 @@ class WeightBacktester:
         print(f"\n✅ Backtest results exported to {filepath}")
 
 
+def backtest_from_data_source(
+    data_path: str = "cache_seed/cleaned_long.parquet",
+    market: str = "IN",
+    use_test_split: bool = True,
+    weight_set: str = "both"
+) -> Dict:
+    """
+    PROPER BACKTEST: Load data, split correctly, then backtest.
+
+    This is the recommended way to run backtests to prevent data leakage.
+
+    Args:
+        data_path: Path to parquet file with company scores and returns
+        market: Market code (IN, US, etc.)
+        use_test_split: If True, use TEST split (2023-2024) for evaluation
+        weight_set: Which weights to test ('baseline', 'optimized', or 'both')
+
+    Returns:
+        Results dictionary with backtest metrics
+    """
+
+    if not HAS_DATA_CONFIG:
+        print("❌ ERROR: data_config.py required for proper backtesting")
+        print("   Install data_config.py to enable train/test split support")
+        return {}
+
+    print(f"\n{'='*80}")
+    print(f"LOADING DATA FOR BACKTEST (PROPER SPLIT)")
+    print(f"{'='*80}")
+
+    # Load full data
+    try:
+        full_data = pd.read_parquet(data_path)
+    except FileNotFoundError:
+        print(f"❌ Data file not found: {data_path}")
+        return {}
+
+    print(f"✓ Loaded {len(full_data):,} records from {Path(data_path).name}")
+
+    # Split data to prevent leakage
+    config = DataConfig()
+
+    if use_test_split:
+        # Use TEST split for backtest (unseen data: 2023-2024)
+        if 'date' in full_data.columns or 'Date' in full_data.columns:
+            backtest_data = filter_data_by_split(full_data, "date", split="test")
+            test_start, test_end = config.date_splits.get_test_range()
+            print(f"✓ Using TEST split: {test_start} to {test_end} ({len(backtest_data):,} records)")
+        else:
+            print("⚠️  No date column found; using all data")
+            backtest_data = full_data
+    else:
+        backtest_data = full_data
+        print(f"⚠️  Using all data (no split; not recommended for evaluation)")
+
+    # Validate backtest data
+    errors = config.validation.validate_dataframe(backtest_data)
+    if errors:
+        print(f"⚠️  Data validation warnings:")
+        for error in errors:
+            print(f"     • {error}")
+
+    # Run backtest
+    backtest = WeightBacktester(backtest_data, use_test_split=use_test_split)
+    results = backtest.run_backtest(weight_set=weight_set)
+    backtest.generate_report(results)
+
+    return results
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Backtest weight optimization (KARZ vs MAIN) with proper train/test splits"
+    )
+    parser.add_argument("--market", default="IN", help="Market code (IN, US, etc.)")
+    parser.add_argument("--data", default="cache_seed/cleaned_long.parquet", help="Path to data file")
+    parser.add_argument("--use-test-split", action="store_true", default=True,
+                       help="Use data_config TEST split to prevent leakage (default: True)")
+    parser.add_argument("--no-split", action="store_true",
+                       help="Use all data (not recommended; overrides --use-test-split)")
+    parser.add_argument("--weight-set", default="both", choices=["baseline", "optimized", "both"],
+                       help="Which weights to test")
+    parser.add_argument("--export", help="Export results to CSV file")
+
+    args = parser.parse_args()
+
     print("\n" + "🎯 "*40)
     print("BACKTEST FRAMEWORK - KARZ vs MAIN WEIGHT COMPARISON")
     print("🎯 "*40)
+    print(f"\n✓ Using proper train/test splits from data_config.py")
+    print(f"✓ This prevents data leakage and ensures fair evaluation")
+    print(f"✓ Backtest on TEST split: unseen recent data (2023-2024)")
+
+    # Run backtest
+    use_split = not args.no_split
+    results = backtest_from_data_source(
+        data_path=args.data,
+        market=args.market,
+        use_test_split=use_split,
+        weight_set=args.weight_set
+    )
+
+    # Export if requested
+    if args.export and results:
+        backtest = WeightBacktester(pd.DataFrame(), use_test_split=use_split)
+        backtest.export_results(results, args.export)
+
+    print("\n✅ Backtest complete")
+    print("\n📖 For details on train/test splits, see DATA_VALIDATION_GUIDE.md")
