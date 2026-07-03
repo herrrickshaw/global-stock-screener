@@ -50,8 +50,26 @@ LTM_YEARS = 10  # long-term memory window (widened for deep backtest history)
 STM_YEARS = 1  # short-term (hot) window
 
 MARKETS = [
-    "IN", "US", "JP", "KR", "CN", "SG", "EU", "HK", "TW", "CA",
-    "AU", "UK", "DE", "SA", "BR", "CH", "ZA", "SE", "FI", "DK",
+    "IN",
+    "US",
+    "JP",
+    "KR",
+    "CN",
+    "SG",
+    "EU",
+    "HK",
+    "TW",
+    "CA",
+    "AU",
+    "UK",
+    "DE",
+    "SA",
+    "BR",
+    "CH",
+    "ZA",
+    "SE",
+    "FI",
+    "DK",
 ]  # Wikipedia top-20
 
 
@@ -117,8 +135,9 @@ def _derive_stm(ltm_long: pd.DataFrame, market: str) -> int:
     return _write(stm, _stm_path(market))
 
 
-def ensure_stm_seeds(markets: Optional[List[str]] = None, force: bool = False,
-                     verbose: bool = True) -> int:
+def ensure_stm_seeds(
+    markets: Optional[List[str]] = None, force: bool = False, verbose: bool = True
+) -> int:
     """Derive any missing STM seed (cleaned_long[_MKT].parquet) from the committed
     5y LTM. The repo ships only the LTM (source of truth); the 1y STM is a trailing
     slice of it, so shipping both duplicates ~120 MB. This regenerates the STM
@@ -135,12 +154,28 @@ def ensure_stm_seeds(markets: Optional[List[str]] = None, force: bool = False,
 
 
 def commit(market: str, new_long: pd.DataFrame, verbose: bool = True) -> dict:
-    """The write half of every operation: upsert new_long into LTM, evict past
-    5y, persist LTM, then re-derive the 1y STM. Returns per-tier row counts."""
+    """The write half of every operation: upsert new_long into LTM, evict past the
+    LTM window, persist LTM, then re-derive the 1y STM. Every write passes the
+    MANDATORY ingest_gate (dedup + compact dtypes + size report + VCRUD audit)."""
     ltm = _upsert(_read_long(_ltm_path(market)), new_long)
     ltm = _evict(ltm, LTM_YEARS)
+    # ── mandatory ingestion gate (best-effort import so the core never hard-breaks)
+    before_bytes = _ltm_path(market).stat().st_size if _ltm_path(market).exists() else 0
+    try:
+        import ingest_gate
+
+        ltm = ingest_gate.gate_frame(market, ltm, _ltm_path(market), verbose=verbose)
+    except Exception as e:  # noqa: BLE001
+        if verbose:
+            print(f"  ⟢ ingest-gate skipped ({str(e)[:50]})")
     n_ltm = _write(ltm, _ltm_path(market))
     n_stm = _derive_stm(ltm, market)
+    try:
+        import ingest_gate
+
+        ingest_gate.report_after(market, _ltm_path(market), before_bytes, verbose=verbose)
+    except Exception:
+        pass
     latest = str(ltm["Date"].max())[:10] if not ltm.empty else "—"
     if verbose:
         print(f"  {market}: LTM {n_ltm} syms / STM {n_stm} syms (latest {latest})")
@@ -163,7 +198,9 @@ def _fetch_new(market: str, period: str, verbose: bool) -> pd.DataFrame:
         import os
 
         live = (
-            Path(os.environ.get("BHAV_CACHE", Path.home() / "Downloads" / "data" / "bhavcopy_cache"))
+            Path(
+                os.environ.get("BHAV_CACHE", Path.home() / "Downloads" / "data" / "bhavcopy_cache")
+            )
             / "cleaned_long.parquet"
         )
         src = live if live.exists() else _stm_path("IN")
@@ -274,15 +311,20 @@ def status(markets: Optional[List[str]] = None) -> pd.DataFrame:
         for tier in ("ltm", "stm"):
             long = _read_long(_ltm_path(m) if tier == "ltm" else _stm_path(m))
             if long.empty:
-                rows.append({"market": m, "tier": tier, "symbols": 0, "start": "—", "end": "—", "rows": 0})
+                rows.append(
+                    {"market": m, "tier": tier, "symbols": 0, "start": "—", "end": "—", "rows": 0}
+                )
             else:
-                rows.append({
-                    "market": m, "tier": tier,
-                    "symbols": long["Symbol"].nunique(),
-                    "start": str(long["Date"].min())[:10],
-                    "end": str(long["Date"].max())[:10],
-                    "rows": len(long),
-                })
+                rows.append(
+                    {
+                        "market": m,
+                        "tier": tier,
+                        "symbols": long["Symbol"].nunique(),
+                        "start": str(long["Date"].min())[:10],
+                        "end": str(long["Date"].max())[:10],
+                        "rows": len(long),
+                    }
+                )
     return pd.DataFrame(rows)
 
 
