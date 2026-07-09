@@ -271,6 +271,29 @@ def extract_news(ctx):
     return "ok"
 
 
+@stage("extract_ipo_tracker", "E")
+def extract_ipo_tracker(ctx):
+    """Detect IPOs / new listings and ADD them to the universe (ipo_tracker), so
+    the reference + scans pick up post-IPO stocks. Runs before the exchange
+    reference. Idempotent per day (skips if the IN snapshot was updated today);
+    fully wrapped so a live-feed hiccup never breaks the pipeline."""
+    snap = os.path.join(BASE, "data", "bhavcopy_cache", "universe_snapshots", "IN.json")
+    if not ctx.force and ctx.fresh(snap):
+        return "skip"
+    try:
+        import ipo_tracker
+
+        found = ipo_tracker.track(ipo_tracker.DEFAULT_MARKETS, verbose=False)
+        counts = {m: len(v.get("new", [])) for m, v in found.items()}
+        ctx.rows["ipo_new"] = sum(counts.values())
+        hit = ", ".join(f"{m}:{n}" for m, n in counts.items() if n)
+        ctx.notes["extract_ipo_tracker"] = "new listings — " + (hit or "none")
+    except Exception as e:
+        ctx.notes["extract_ipo_tracker"] = f"failed: {str(e)[:90]}"
+        return "fail"
+    return "ok"
+
+
 @stage("extract_exchange_reference", "E")
 def extract_exchange_reference(ctx):
     """Build the all-exchange data-freshness reference + daily checklist (runs
