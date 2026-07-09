@@ -25,7 +25,9 @@ import pandas as pd
 import requests
 
 BASE = os.path.expanduser("~/Downloads/code/python_files")
-OUT_DIR = os.path.join(BASE, "cache_seed", "fundamentals_history")
+OUT_DIR = os.environ.get("FUND_HIST_DIR") or os.path.join(
+    BASE, "cache_seed", "fundamentals_history"
+)
 OUT = os.path.join(OUT_DIR, "US.parquet")
 _UA = {"User-Agent": "market-research umashankartd1991@gmail.com"}  # SEC requires a contact
 _RATE = 0.13  # ~8 req/s (SEC allows 10)
@@ -147,6 +149,7 @@ def main():
                 else pd.DataFrame()
             )
             if not df.empty:
+                os.makedirs(OUT_DIR, exist_ok=True)  # survive a mid-run dir wipe
                 df.to_parquet(OUT, index=False)
             print(f"  {i}/{len(todo)} | {n_ok} with data | {len(df)} rows | {time.time()-t0:.0f}s")
     print(f"done → {os.path.relpath(OUT, BASE)}")

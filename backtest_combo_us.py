@@ -37,7 +37,10 @@ import pandas as pd
 import backtest  # reuse _pit() for sma/rsi/near_high price features
 
 BASE = os.path.expanduser("~/Downloads/code/python_files")
-HIST = os.path.join(BASE, "cache_seed", "fundamentals_history", "US.parquet")
+HIST = os.path.join(
+    os.environ.get("FUND_HIST_DIR") or os.path.join(BASE, "cache_seed", "fundamentals_history"),
+    "US.parquet",
+)
 PRICES = os.path.join(BASE, "cache_seed", "ltm", "US.parquet")
 
 PRICE_SCREENS = ["darvas", "near_high", "rsi_oversold"]
