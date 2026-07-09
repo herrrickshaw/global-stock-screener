@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Assemble the daily market report email from the combined-report JSONs,
 US fundamentals scan, and the two Darvas fragments."""
-import json, os, datetime, html
-import numpy as np, pandas as pd
+import datetime
+import html
+import json
+import os
+
+import numpy as np
+import pandas as pd
 
 BASE = os.path.expanduser("~/Downloads/code/python_files")
 SP = "/private/tmp/claude-501/-Users-umashankar/f9e77393-1920-4a43-b9bd-676ad0b5a584/scratchpad"
@@ -10,56 +15,105 @@ IN_JSON = os.path.join(BASE, "combined_report_results/combined_IN_20260709_0808.
 US_JSON = os.path.join(BASE, "combined_report_results/combined_US_20260709_0809.json")
 US_SCAN = os.path.join(BASE, "us_full_scan/us_full_scan_20260708_1238.xlsx")
 import glob as _glob
+
+
 def _latest_eu():
-    broad = sorted(_glob.glob(os.path.join(BASE, "european_scan/european_market_scan_broad_*.xlsx")), key=os.path.getmtime)
+    broad = sorted(
+        _glob.glob(os.path.join(BASE, "european_scan/european_market_scan_broad_*.xlsx")),
+        key=os.path.getmtime,
+    )
     if broad:
         return broad[-1]
-    any_eu = sorted(_glob.glob(os.path.join(BASE, "european_scan/european_market_scan_*.xlsx")), key=os.path.getmtime)
-    return any_eu[-1] if any_eu else os.path.join(BASE, "european_scan/european_market_scan_20260709_0842.xlsx")
+    any_eu = sorted(
+        _glob.glob(os.path.join(BASE, "european_scan/european_market_scan_*.xlsx")),
+        key=os.path.getmtime,
+    )
+    return (
+        any_eu[-1]
+        if any_eu
+        else os.path.join(BASE, "european_scan/european_market_scan_20260709_0842.xlsx")
+    )
+
+
 EU_SCAN = _latest_eu()
 
-esc = lambda s: html.escape(str(s))
-inj = json.load(open(IN_JSON)); usj = json.load(open(US_JSON))
+
+def esc(s):
+    return html.escape(str(s))
+
+
+inj = json.load(open(IN_JSON))
+usj = json.load(open(US_JSON))
 
 # ---- US fundamentals enrichment: exchange, name, sector, PE, sector-relative zone
 fu = pd.read_excel(US_SCAN, sheet_name="All_Fundamentals")
-fu["PE"] = fu["Earnings_Yield_%"].apply(lambda e: 100.0/e if pd.notna(e) and e > 0 else np.nan)
+fu["PE"] = fu["Earnings_Yield_%"].apply(lambda e: 100.0 / e if pd.notna(e) and e > 0 else np.nan)
 sec_med = fu.groupby("Sector")["PE"].median()
 uni_med = fu["PE"].median()
 meta = fu.set_index("Symbol")[["Exchange", "Name", "Sector", "PE"]].to_dict("index")
+
 
 def pe_zone(sym):
     m = meta.get(sym)
     if not m or pd.isna(m["PE"]):
         return "—", "#888"
-    pe = m["PE"]; sm = sec_med.get(m["Sector"], uni_med)
+    pe = m["PE"]
+    sm = sec_med.get(m["Sector"], uni_med)
     if pd.isna(sm) or sm <= 0:
         return f"PE {pe:.0f}", "#888"
     r = pe / sm
-    if r <= 0.8:   return f"🟢 BUY (PE {pe:.0f} vs {sm:.0f})", "#1a7f37"
-    if r <= 1.1:   return f"🟡 FAIR (PE {pe:.0f} vs {sm:.0f})", "#b58a00"
-    if r <= 1.6:   return f"🟠 CAUTION (PE {pe:.0f} vs {sm:.0f})", "#c05a00"
+    if r <= 0.8:
+        return f"🟢 BUY (PE {pe:.0f} vs {sm:.0f})", "#1a7f37"
+    if r <= 1.1:
+        return f"🟡 FAIR (PE {pe:.0f} vs {sm:.0f})", "#b58a00"
+    if r <= 1.6:
+        return f"🟠 CAUTION (PE {pe:.0f} vs {sm:.0f})", "#c05a00"
     return f"🔴 RICH (PE {pe:.0f} vs {sm:.0f})", "#c0392b"
+
 
 def usname(sym):
     m = meta.get(sym)
     n = m["Name"] if m else None
     return str(n) if (n is not None and not (isinstance(n, float) and pd.isna(n))) else sym
+
+
 def usexch(sym):
     m = meta.get(sym)
     e = m["Exchange"] if m else None
     return str(e) if (e is not None and not (isinstance(e, float) and pd.isna(e))) else "US"
 
+
 # ---- Europe: broad multi-exchange scan (Fundamentals + Darvas_Signals sheets)
 # Suffix ordered longest-first so ".MC" isn't shadowed by ".C"-style prefixes.
-EU_EXCH = {".DE": "XETRA", ".F": "Frankfurt", ".PA": "Euronext Paris", ".AS": "Euronext Amsterdam",
-           ".BR": "Euronext Brussels", ".MI": "Borsa Italiana", ".MC": "BME Madrid",
-           ".HE": "Nasdaq Helsinki", ".ST": "Nasdaq Stockholm", ".CO": "Nasdaq Copenhagen",
-           ".OL": "Oslo Bors", ".LS": "Euronext Lisbon", ".IR": "Euronext Dublin",
-           ".SW": "SIX Swiss", ".VI": "Vienna", ".L": "London SE",
-           ".IS": "Borsa Istanbul", ".PR": "Prague SE", ".BD": "Budapest SE",
-           ".TL": "Nasdaq Tallinn", ".RG": "Nasdaq Riga", ".VS": "Nasdaq Vilnius",
-           ".IC": "Nasdaq Iceland", ".WA": "Warsaw GPW", ".AT": "Athens SE"}
+EU_EXCH = {
+    ".DE": "XETRA",
+    ".F": "Frankfurt",
+    ".PA": "Euronext Paris",
+    ".AS": "Euronext Amsterdam",
+    ".BR": "Euronext Brussels",
+    ".MI": "Borsa Italiana",
+    ".MC": "BME Madrid",
+    ".HE": "Nasdaq Helsinki",
+    ".ST": "Nasdaq Stockholm",
+    ".CO": "Nasdaq Copenhagen",
+    ".OL": "Oslo Bors",
+    ".LS": "Euronext Lisbon",
+    ".IR": "Euronext Dublin",
+    ".SW": "SIX Swiss",
+    ".VI": "Vienna",
+    ".L": "London SE",
+    ".IS": "Borsa Istanbul",
+    ".PR": "Prague SE",
+    ".BD": "Budapest SE",
+    ".TL": "Nasdaq Tallinn",
+    ".RG": "Nasdaq Riga",
+    ".VS": "Nasdaq Vilnius",
+    ".IC": "Nasdaq Iceland",
+    ".WA": "Warsaw GPW",
+    ".AT": "Athens SE",
+}
+
+
 def eu_exch(sym):
     su = str(sym).upper()
     for suf in sorted(EU_EXCH, key=len, reverse=True):
@@ -67,9 +121,22 @@ def eu_exch(sym):
             return EU_EXCH[suf]
     return "Europe"
 
+
 # Local currency by suffix (Baltics .TL/.RG/.VS are eurozone → €).
-EU_CUR = {".L": "£", ".SW": "CHF ", ".ST": "kr", ".OL": "kr", ".CO": "kr", ".IC": "kr",
-          ".WA": "zł", ".IS": "₺", ".PR": "Kč", ".BD": "Ft"}
+EU_CUR = {
+    ".L": "£",
+    ".SW": "CHF ",
+    ".ST": "kr",
+    ".OL": "kr",
+    ".CO": "kr",
+    ".IC": "kr",
+    ".WA": "zł",
+    ".IS": "₺",
+    ".PR": "Kč",
+    ".BD": "Ft",
+}
+
+
 def eu_cur(sym):
     su = str(sym).upper()
     for suf in sorted(EU_CUR, key=len, reverse=True):
@@ -77,17 +144,20 @@ def eu_cur(sym):
             return EU_CUR[suf]
     return "€"
 
+
 def eu_name(s):
     """Clean a company name for display — some yfinance shortNames come back
     mangled as 'TICKER.XX,0P00...,1060'; keep the readable part before the comma."""
     n = str(s).split(",")[0].strip()
     return n or str(s)
 
+
 eu_fu = pd.read_excel(EU_SCAN, sheet_name="Fundamentals")
 eu_fu["P_E_Ratio"] = pd.to_numeric(eu_fu["P_E_Ratio"], errors="coerce")
 eu_sec_med = eu_fu.groupby("Sector")["P_E_Ratio"].median()
 eu_uni_med = eu_fu["P_E_Ratio"].median()
 eu_dv = pd.read_excel(EU_SCAN, sheet_name="Darvas_Signals")
+
 
 def eu_pe_zone(pe, sector):
     if pd.isna(pe) or pe <= 0:
@@ -96,54 +166,83 @@ def eu_pe_zone(pe, sector):
     if pd.isna(sm) or sm <= 0:
         return f"PE {pe:.0f}", "#888"
     r = pe / sm
-    if r <= 0.8:  return f"🟢 BUY (PE {pe:.0f} vs {sm:.0f})", "#1a7f37"
-    if r <= 1.1:  return f"🟡 FAIR (PE {pe:.0f} vs {sm:.0f})", "#b58a00"
-    if r <= 1.6:  return f"🟠 CAUTION (PE {pe:.0f} vs {sm:.0f})", "#c05a00"
+    if r <= 0.8:
+        return f"🟢 BUY (PE {pe:.0f} vs {sm:.0f})", "#1a7f37"
+    if r <= 1.1:
+        return f"🟡 FAIR (PE {pe:.0f} vs {sm:.0f})", "#b58a00"
+    if r <= 1.6:
+        return f"🟠 CAUTION (PE {pe:.0f} vs {sm:.0f})", "#c05a00"
     return f"🔴 RICH (PE {pe:.0f} vs {sm:.0f})", "#c0392b"
+
 
 def eu_screens(row):
     s = []
-    if str(row.get("Darvas_Signal")) == "BREAKOUT_BUY": s.append("Darvas")
-    if pd.notna(row.get("Piotroski_Score")) and row["Piotroski_Score"] >= 7: s.append("Piotroski")
-    if str(row.get("CoffeeCan_Class")) == "PASS": s.append("CoffeeCan")
+    if str(row.get("Darvas_Signal")) == "BREAKOUT_BUY":
+        s.append("Darvas")
+    if pd.notna(row.get("Piotroski_Score")) and row["Piotroski_Score"] >= 7:
+        s.append("Piotroski")
+    if str(row.get("CoffeeCan_Class")) == "PASS":
+        s.append("CoffeeCan")
     return "+".join(s) or "—"
+
 
 # ---------------------------------------------------------------- Component 1
 def us_c1_rows(picks, tiers):
     rows = ""
     for p in picks:
-        if p["Tier"] not in tiers: continue
-        sym = p["Symbol"]; zt, zc = pe_zone(sym)
-        pio = "" if p.get("Piotroski") in (None,) or (isinstance(p.get("Piotroski"), float) and np.isnan(p["Piotroski"])) else f'{p["Piotroski"]:.0f}'
-        rows += (f'<tr><td style="padding:6px 8px;border-bottom:1px solid #eee"><b>{esc(usname(sym).upper())}</b>'
-                 f' <span style="color:#666;font-size:12px">[{esc(sym)} · {esc(usexch(sym))}]</span></td>'
-                 f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${p["LTP"]:,.2f}</td>'
-                 f'<td style="padding:6px 8px;border-bottom:1px solid #eee">{esc(p["Tier"])}</td>'
-                 f'<td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:12px">{esc(p["Screens"])}</td>'
-                 f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">{pio}</td>'
-                 f'<td style="padding:6px 8px;border-bottom:1px solid #eee;color:{zc};font-size:12px">{zt}</td></tr>')
+        if p["Tier"] not in tiers:
+            continue
+        sym = p["Symbol"]
+        zt, zc = pe_zone(sym)
+        pio = (
+            ""
+            if p.get("Piotroski") in (None,)
+            or (isinstance(p.get("Piotroski"), float) and np.isnan(p["Piotroski"]))
+            else f'{p["Piotroski"]:.0f}'
+        )
+        rows += (
+            f'<tr><td style="padding:6px 8px;border-bottom:1px solid #eee"><b>{esc(usname(sym).upper())}</b>'
+            f' <span style="color:#666;font-size:12px">[{esc(sym)} · {esc(usexch(sym))}]</span></td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${p["LTP"]:,.2f}</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #eee">{esc(p["Tier"])}</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:12px">{esc(p["Screens"])}</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">{pio}</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #eee;color:{zc};font-size:12px">{zt}</td></tr>'
+        )
     return rows
 
-C1_HDR = ('<tr style="background:#1f2937;color:#fff">'
-          '<th style="padding:8px;text-align:left">Company [Ticker · Exch]</th>'
-          '<th style="padding:8px;text-align:right">LTP</th><th style="padding:8px;text-align:left">Tier</th>'
-          '<th style="padding:8px;text-align:left">Screens</th><th style="padding:8px">Piotroski</th>'
-          '<th style="padding:8px;text-align:left">PE Zone (sector-rel.)</th></tr>')
+
+C1_HDR = (
+    '<tr style="background:#1f2937;color:#fff">'
+    '<th style="padding:8px;text-align:left">Company [Ticker · Exch]</th>'
+    '<th style="padding:8px;text-align:right">LTP</th><th style="padding:8px;text-align:left">Tier</th>'
+    '<th style="padding:8px;text-align:left">Screens</th><th style="padding:8px">Piotroski</th>'
+    '<th style="padding:8px;text-align:left">PE Zone (sector-rel.)</th></tr>'
+)
 
 # US split by exchange
 us_picks = [p for p in usj["picks"] if p["Tier"] in ("Triple Hit", "Multi-Screen")]
+
+
 def by_exch(picks, exch):
     return [p for p in picks if usexch(p["Symbol"]) == exch]
-nasd = by_exch(us_picks, "NASDAQ"); nyse = by_exch(us_picks, "NYSE")
+
+
+nasd = by_exch(us_picks, "NASDAQ")
+nyse = by_exch(us_picks, "NYSE")
 other = [p for p in us_picks if usexch(p["Symbol"]) not in ("NASDAQ", "NYSE")]
 
+
 def order(picks):  # Triple Hits first
-    return [p for p in picks if p["Tier"] == "Triple Hit"] + [p for p in picks if p["Tier"] == "Multi-Screen"]
+    return [p for p in picks if p["Tier"] == "Triple Hit"] + [
+        p for p in picks if p["Tier"] == "Multi-Screen"
+    ]
+
 
 us_c1 = "<h3 style='margin:14px 0 4px;font-size:15px'>🇺🇸 US — NASDAQ</h3>"
 us_c1 += f'<table style="width:100%;border-collapse:collapse;font-size:13px">{C1_HDR}{us_c1_rows(order(nasd),("Triple Hit","Multi-Screen"))}</table>'
 us_c1 += "<h3 style='margin:14px 0 4px;font-size:15px'>🇺🇸 US — NYSE</h3>"
-nyse_rows = us_c1_rows(order(nyse), ("Triple Hit","Multi-Screen"))
+nyse_rows = us_c1_rows(order(nyse), ("Triple Hit", "Multi-Screen"))
 us_c1 += f'<table style="width:100%;border-collapse:collapse;font-size:13px">{C1_HDR}{nyse_rows or "<tr><td colspan=6 style=padding:6px;color:#666>No NYSE multi-screen hits today.</td></tr>"}</table>'
 if other:
     us_c1 += "<h3 style='margin:14px 0 4px;font-size:15px'>🇺🇸 US — Other (ADR/AMEX)</h3>"
@@ -153,23 +252,35 @@ if other:
 in_top = inj["picks"][:25]
 in_rows = ""
 for p in in_top:
-    in_rows += (f'<tr><td style="padding:6px 8px;border-bottom:1px solid #eee"><b>{esc(p["Symbol"])}</b>'
-                f' <span style="color:#666;font-size:12px">[{esc(p["Symbol"])} · NSE]</span></td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">₹{p["LTP"]:,.2f}</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee">{esc(p["Tier"])}</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:12px">{esc(p["Screens"])}</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">—</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;color:#888;font-size:12px">n/a</td></tr>')
-in_c1 = ("<p style='font-size:12px;color:#666;margin:6px 0'>India's full-universe scan produced <b>no Triple-Hit or "
-         "Multi-Screen fundamental picks</b> today — only single-screen Darvas/Golden-Cross momentum names, with no "
-         "Piotroski or sector-PE fundamentals attached in this run. Top 25 single-screen names shown (all NSE-listed):</p>")
-in_c1 += f'<table style="width:100%;border-collapse:collapse;font-size:13px">{C1_HDR}{in_rows}</table>'
+    in_rows += (
+        f'<tr><td style="padding:6px 8px;border-bottom:1px solid #eee"><b>{esc(p["Symbol"])}</b>'
+        f' <span style="color:#666;font-size:12px">[{esc(p["Symbol"])} · NSE]</span></td>'
+        f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">₹{p["LTP"]:,.2f}</td>'
+        f'<td style="padding:6px 8px;border-bottom:1px solid #eee">{esc(p["Tier"])}</td>'
+        f'<td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:12px">{esc(p["Screens"])}</td>'
+        f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">—</td>'
+        f'<td style="padding:6px 8px;border-bottom:1px solid #eee;color:#888;font-size:12px">n/a</td></tr>'
+    )
+in_c1 = (
+    "<p style='font-size:12px;color:#666;margin:6px 0'>India's full-universe scan produced <b>no Triple-Hit or "
+    "Multi-Screen fundamental picks</b> today — only single-screen Darvas/Golden-Cross momentum names, with no "
+    "Piotroski or sector-PE fundamentals attached in this run. Top 25 single-screen names shown (all NSE-listed):</p>"
+)
+in_c1 += (
+    f'<table style="width:100%;border-collapse:collapse;font-size:13px">{C1_HDR}{in_rows}</table>'
+)
 
 # Europe Component 1 — Triple Hit (P>=7 & CoffeeCan PASS) first, then strong Piotroski>=7.
 # Broad universe yields many P>=7 names; cap the table to the strongest, note the rest.
 eu_pick_all = eu_fu[eu_fu["Piotroski_Score"] >= 7].copy()
-eu_pick_all["is_triple"] = (eu_pick_all["Piotroski_Score"] >= 7) & (eu_pick_all["CoffeeCan_Class"] == "PASS") & (eu_pick_all["Darvas_Signal"] == "BREAKOUT_BUY")
-eu_pick_all["_cc"] = pd.to_numeric(eu_pick_all["CoffeeCan_Score"].astype(str).str.split("/").str[0], errors="coerce").fillna(0)
+eu_pick_all["is_triple"] = (
+    (eu_pick_all["Piotroski_Score"] >= 7)
+    & (eu_pick_all["CoffeeCan_Class"] == "PASS")
+    & (eu_pick_all["Darvas_Signal"] == "BREAKOUT_BUY")
+)
+eu_pick_all["_cc"] = pd.to_numeric(
+    eu_pick_all["CoffeeCan_Score"].astype(str).str.split("/").str[0], errors="coerce"
+).fillna(0)
 eu_pick_all = eu_pick_all.sort_values(["is_triple", "Piotroski_Score", "_cc"], ascending=False)
 EU_CAP = 30
 eu_pick = eu_pick_all.head(EU_CAP)
@@ -178,13 +289,15 @@ eu_rows = ""
 for _, r in eu_pick.iterrows():
     tier = "Triple Hit" if r["is_triple"] else "Multi-Screen"
     zt, zc = eu_pe_zone(r["P_E_Ratio"], r["Sector"])
-    eu_rows += (f'<tr><td style="padding:6px 8px;border-bottom:1px solid #eee"><b>{esc(eu_name(r["Name"]).upper())}</b>'
-                f' <span style="color:#666;font-size:12px">[{esc(r["Symbol"])} · {esc(eu_exch(r["Symbol"]))}]</span></td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">{eu_cur(r["Symbol"])}{r["LTP"]:,.2f}</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee">{tier}</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:12px">{esc(eu_screens(r))}</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">{r["Piotroski_Score"]:.0f}</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;color:{zc};font-size:12px">{zt}</td></tr>')
+    eu_rows += (
+        f'<tr><td style="padding:6px 8px;border-bottom:1px solid #eee"><b>{esc(eu_name(r["Name"]).upper())}</b>'
+        f' <span style="color:#666;font-size:12px">[{esc(r["Symbol"])} · {esc(eu_exch(r["Symbol"]))}]</span></td>'
+        f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">{eu_cur(r["Symbol"])}{r["LTP"]:,.2f}</td>'
+        f'<td style="padding:6px 8px;border-bottom:1px solid #eee">{tier}</td>'
+        f'<td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:12px">{esc(eu_screens(r))}</td>'
+        f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">{r["Piotroski_Score"]:.0f}</td>'
+        f'<td style="padding:6px 8px;border-bottom:1px solid #eee;color:{zc};font-size:12px">{zt}</td></tr>'
+    )
 try:
     eu_all = pd.read_excel(EU_SCAN, sheet_name="All_Stocks")
     eu_scanned = len(eu_all)
@@ -192,20 +305,36 @@ try:
 except Exception:
     eu_scanned = len(eu_dv)
     eu_n_exch = len({eu_exch(s) for s in eu_dv["Symbol"]})
-eu_c1 = (f"<p style='font-size:12px;color:#666;margin:6px 0'>Broad European universe — <b>{eu_scanned} stocks across {eu_n_exch} exchanges</b> "
-         "(LSE, Deutsche Börse, Euronext Paris/Amsterdam/Brussels/Lisbon/Dublin, Borsa Italiana, BME Madrid, Nasdaq Nordic &amp; Baltic, "
-         "SIX Swiss, Vienna, Warsaw, Athens, Borsa Istanbul, Prague, Budapest, Iceland). "
-         "<b>Triple Hit</b> = Darvas breakout + Piotroski≥7 + Coffee Can PASS; <b>Multi-Screen</b> = Piotroski≥7 breakout. "
-         f"PE Zone is sector-relative within the EU universe; LTP in each market's local currency. "
-         f"<b>{len(eu_pick_all)}</b> names cleared Piotroski≥7 — showing the strongest {len(eu_pick)}"
-         f"{f' (+{eu_more} more in the CSV)' if eu_more else ''}.</p>")
-eu_c1 += f'<table style="width:100%;border-collapse:collapse;font-size:13px">{C1_HDR}{eu_rows}</table>'
+eu_c1 = (
+    f"<p style='font-size:12px;color:#666;margin:6px 0'>Broad European universe — <b>{eu_scanned} stocks across {eu_n_exch} exchanges</b> "
+    "(LSE, Deutsche Börse, Euronext Paris/Amsterdam/Brussels/Lisbon/Dublin, Borsa Italiana, BME Madrid, Nasdaq Nordic &amp; Baltic, "
+    "SIX Swiss, Vienna, Warsaw, Athens, Borsa Istanbul, Prague, Budapest, Iceland). "
+    "<b>Triple Hit</b> = Darvas breakout + Piotroski≥7 + Coffee Can PASS; <b>Multi-Screen</b> = Piotroski≥7 breakout. "
+    f"PE Zone is sector-relative within the EU universe; LTP in each market's local currency. "
+    f"<b>{len(eu_pick_all)}</b> names cleared Piotroski≥7 — showing the strongest {len(eu_pick)}"
+    f"{f' (+{eu_more} more in the CSV)' if eu_more else ''}.</p>"
+)
+eu_c1 += (
+    f'<table style="width:100%;border-collapse:collapse;font-size:13px">{C1_HDR}{eu_rows}</table>'
+)
 # Persist the full Europe pick list (all Piotroski≥7) so the capped table has a source.
 try:
-    _euc = ["Symbol", "Name", "Sector", "LTP", "P_E_Ratio", "Piotroski_Score",
-            "CoffeeCan_Score", "CoffeeCan_Class", "Darvas_Signal", "is_triple"]
+    _euc = [
+        "Symbol",
+        "Name",
+        "Sector",
+        "LTP",
+        "P_E_Ratio",
+        "Piotroski_Score",
+        "CoffeeCan_Score",
+        "CoffeeCan_Class",
+        "Darvas_Signal",
+        "is_triple",
+    ]
     eu_pick_all[[c for c in _euc if c in eu_pick_all.columns]].to_csv(
-        os.path.expanduser(f"~/Downloads/eu_broad_picks_{datetime.date(2026,7,9).isoformat()}.csv"), index=False)
+        os.path.expanduser(f"~/Downloads/eu_broad_picks_{datetime.date(2026,7,9).isoformat()}.csv"),
+        index=False,
+    )
 except Exception:
     pass
 
@@ -213,69 +342,89 @@ except Exception:
 # Prefer position 100–120% + uptrend + up-on-day; fall back to least-extended uptrend.
 eu_b = eu_dv[eu_dv["Darvas_Signal"] == "BREAKOUT_BUY"].copy()
 eu_up = eu_b["Trend_Signal"].astype(str).str.contains("Uptrend", na=False)
-eu_fresh = eu_b[eu_up & eu_b["Position_in_Box%"].between(100, 120) & (eu_b["Change%"] > 0)] \
-    .sort_values("Change%", ascending=False).head(12)
+eu_fresh = (
+    eu_b[eu_up & eu_b["Position_in_Box%"].between(100, 120) & (eu_b["Change%"] > 0)]
+    .sort_values("Change%", ascending=False)
+    .head(12)
+)
 eu_fresh_mode = "fresh"
 if eu_fresh.empty:
     eu_fresh = eu_b[eu_up].sort_values("Position_in_Box%").head(10)
     eu_fresh_mode = "least-extended"
 eu_bd = eu_dv[eu_dv["Darvas_Signal"] == "BREAKDOWN_SELL"].sort_values("Change%").head(10)
+
+
 def eu_dv_rows(rows):
     out = ""
     for _, r in rows.iterrows():
         cur = eu_cur(r["Symbol"])
-        out += (f'<tr><td style="padding:6px 8px;border-bottom:1px solid #eee"><b>{esc(eu_name(r["Name"]))}</b>'
-                f' <span style="color:#666;font-size:12px">[{esc(r["Symbol"])} · {esc(eu_exch(r["Symbol"]))}]</span></td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">{cur}{r["LTP"]:,.2f}</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:{"#1a7f37" if r["Change%"]>=0 else "#c0392b"}">{r["Change%"]:+.1f}%</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">{cur}{r["Box_Top"]:,.2f}</td>'
-                f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">{r["Position_in_Box%"]:.0f}%</td></tr>')
+        out += (
+            f'<tr><td style="padding:6px 8px;border-bottom:1px solid #eee"><b>{esc(eu_name(r["Name"]))}</b>'
+            f' <span style="color:#666;font-size:12px">[{esc(r["Symbol"])} · {esc(eu_exch(r["Symbol"]))}]</span></td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">{cur}{r["LTP"]:,.2f}</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:{"#1a7f37" if r["Change%"]>=0 else "#c0392b"}">{r["Change%"]:+.1f}%</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">{cur}{r["Box_Top"]:,.2f}</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">{r["Position_in_Box%"]:.0f}%</td></tr>'
+        )
     return out
-eu_dv_hdr = ('<tr style="background:#1f2937;color:#fff"><th style="padding:8px;text-align:left">Company [Ticker · Exch]</th>'
-             '<th style="padding:8px;text-align:right">LTP</th><th style="padding:8px;text-align:right">Day%</th>'
-             '<th style="padding:8px;text-align:right">Box Top</th><th style="padding:8px">Box Pos</th></tr>')
+
+
+eu_dv_hdr = (
+    '<tr style="background:#1f2937;color:#fff"><th style="padding:8px;text-align:left">Company [Ticker · Exch]</th>'
+    '<th style="padding:8px;text-align:right">LTP</th><th style="padding:8px;text-align:right">Day%</th>'
+    '<th style="padding:8px;text-align:right">Box Top</th><th style="padding:8px">Box Pos</th></tr>'
+)
 eu_bd_total = int((eu_dv["Darvas_Signal"] == "BREAKDOWN_SELL").sum())
 eu_bd_names = ", ".join(f'{esc(r["Name"])} ({r["Change%"]:+.1f}%)' for _, r in eu_bd.iterrows())
 
 # Emerging Europe (Istanbul/Prague/Budapest): yfinance has their OHLC but NOT
 # their financial statements, so these names produce Darvas momentum signals only
 # (no Piotroski/Coffee Can → absent from Component 1). Surface their top breakouts.
-_EMERG = {".IS": 5, ".PR": 3, ".BD": 4}   # per-exchange cap so all three show
+_EMERG = {".IS": 5, ".PR": 3, ".BD": 4}  # per-exchange cap so all three show
 _em_parts = []
 for _suf, _n in _EMERG.items():
-    _sub = eu_b[eu_b["Symbol"].astype(str).str.upper().str.endswith(_suf)] \
-        .sort_values("Change%", ascending=False).head(_n)
+    _sub = (
+        eu_b[eu_b["Symbol"].astype(str).str.upper().str.endswith(_suf)]
+        .sort_values("Change%", ascending=False)
+        .head(_n)
+    )
     _em_parts.append(_sub)
 eu_em = pd.concat(_em_parts).sort_values("Change%", ascending=False) if _em_parts else eu_b.head(0)
 try:
     import emerging_fundamentals as _ef
+
     _emerg_src = _ef.available_source()
 except Exception:
     _emerg_src = None
 _emerg_note = (
     f"Fundamentals for these markets are now sourced from <b>{esc(_emerg_src)}</b> (yfinance lacks them), "
     "so qualifying names also appear in the fundamental picks above; this block is the momentum view."
-    if _emerg_src else
-    "These markets have price data but no yfinance financial statements, so they appear here as momentum only — "
-    "not in the fundamental picks above. Set <code>FMP_API_KEY</code> or <code>TWELVEDATA_KEY</code> to add their fundamentals.")
+    if _emerg_src
+    else "These markets have price data but no yfinance financial statements, so they appear here as momentum only — "
+    "not in the fundamental picks above. Set <code>FMP_API_KEY</code> or <code>TWELVEDATA_KEY</code> to add their fundamentals."
+)
 eu_emerging_html = ""
 if not eu_em.empty:
     eu_emerging_html = (
         '<p style="font-size:13px;font-weight:700;margin:14px 0 4px">🆕 Emerging-Europe breakouts (Istanbul · Prague · Budapest)</p>'
         f'<p style="font-size:11px;color:#888;margin:0 0 4px">{_emerg_note}</p>'
-        f'<table style="width:100%;border-collapse:collapse;font-size:13px">{eu_dv_hdr}{eu_dv_rows(eu_em)}</table>')
-eu_intro = ("Fresh box breakouts across the broad European universe — price just clearing the box top "
-            "(position 100–120%), in an uptrend, up on the day."
-            if eu_fresh_mode == "fresh" else
-            "Most breakouts today are already extended above their boxes, so no tight/fresh entries qualified — "
-            "showing uptrend breakouts nearest their box top (least-extended first).")
+        f'<table style="width:100%;border-collapse:collapse;font-size:13px">{eu_dv_hdr}{eu_dv_rows(eu_em)}</table>'
+    )
+eu_intro = (
+    "Fresh box breakouts across the broad European universe — price just clearing the box top "
+    "(position 100–120%), in an uptrend, up on the day."
+    if eu_fresh_mode == "fresh"
+    else "Most breakouts today are already extended above their boxes, so no tight/fresh entries qualified — "
+    "showing uptrend breakouts nearest their box top (least-extended first)."
+)
 eu_darvas = (
     '<h2 style="font-size:17px;color:#111;border-bottom:2px solid #eee;padding-bottom:4px;margin:22px 0 8px">📈 🇪🇺 EUROPE DARVAS BREAKOUTS</h2>'
     f'<p style="font-size:12px;color:#666;margin:2px 0 8px">{eu_intro}</p>'
     f'<table style="width:100%;border-collapse:collapse;font-size:13px">{eu_dv_hdr}{eu_dv_rows(eu_fresh) or "<tr><td colspan=5 style=padding:6px;color:#666>None in a clean uptrend today.</td></tr>"}</table>'
-    f'{eu_emerging_html}'
+    f"{eu_emerging_html}"
     f'<p style="font-size:12px;color:#c0392b;margin:10px 0 2px"><b>🔻 Darvas breakdowns (SELL side, {eu_bd_total} total):</b> {eu_bd_names}</p>'
-    '<p style="font-size:11px;color:#888;margin:6px 0">Momentum signals, NOT buy recommendations. European box positions scale differently from NSE/US; treat these as trend context.</p>')
+    '<p style="font-size:11px;color:#888;margin:6px 0">Momentum signals, NOT buy recommendations. European box positions scale differently from NSE/US; treat these as trend context.</p>'
+)
 
 # ---------------------------------------------------------------- Europe news sentiment
 # Run the free EU RSS sentiment pipeline on the fundamental picks (by company name),
@@ -283,6 +432,7 @@ eu_darvas = (
 eu_mood, eu_talk, eu_conv_hi, eu_conv_cau = {}, {}, [], []
 try:
     from sentiment_pipeline import SentimentPipeline
+
     _sp = SentimentPipeline()
     eu_mood = _sp.get_market_mood("EU") or {}
     # Score the strongest ~40 EU picks (name-matched); RSS feeds are cached per run.
@@ -297,15 +447,22 @@ try:
         if s.n_articles > 0 and s.label != "NO_DATA":
             _eu_seen.add(_nk)
             hl = s.top_headlines[0]["title"] if s.top_headlines else ""
-            eu_talk[sym] = {"name": nm, "label": s.label, "score": s.score,
-                            "n_articles": s.n_articles, "headline": hl,
-                            "exch": eu_exch(sym), "tier": "Triple Hit" if r["is_triple"] else "Multi-Screen"}
+            eu_talk[sym] = {
+                "name": nm,
+                "label": s.label,
+                "score": s.score,
+                "n_articles": s.n_articles,
+                "headline": hl,
+                "exch": eu_exch(sym),
+                "tier": "Triple Hit" if r["is_triple"] else "Multi-Screen",
+            }
             if s.label == "POSITIVE":
                 eu_conv_hi.append(eu_talk[sym])
             elif s.label == "NEGATIVE":
                 eu_conv_cau.append(eu_talk[sym])
 except Exception as _e:
     eu_mood = {"error": str(_e)[:120]}
+
 
 # ---------------------------------------------------------------- Convergence
 def conv_section():
@@ -321,10 +478,12 @@ def conv_section():
     if hi:
         out += "<ul style='margin:4px 0'>"
         for c in hi:
-            out += (f"<li style='background:#e8f5e9;padding:4px 8px;margin:3px 0;border-radius:4px'>"
-                    f"<b>{esc(usname(c['Symbol']).upper())}</b> [{esc(c['Symbol'])} · {esc(usexch(c['Symbol']))}] — "
-                    f"{esc(c['Tier'])}, news <b>+{c['News_Score']:.2f}</b> ({c['N_Articles']} art.): "
-                    f"<i>{esc(c['Top_Headline'])}…</i></li>")
+            out += (
+                f"<li style='background:#e8f5e9;padding:4px 8px;margin:3px 0;border-radius:4px'>"
+                f"<b>{esc(usname(c['Symbol']).upper())}</b> [{esc(c['Symbol'])} · {esc(usexch(c['Symbol']))}] — "
+                f"{esc(c['Tier'])}, news <b>+{c['News_Score']:.2f}</b> ({c['N_Articles']} art.): "
+                f"<i>{esc(c['Top_Headline'])}…</i></li>"
+            )
         out += "</ul>"
     else:
         out += "<p style='color:#666'>None today.</p>"
@@ -332,10 +491,12 @@ def conv_section():
     if cau:
         out += "<ul style='margin:4px 0'>"
         for c in cau:
-            out += (f"<li style='background:#fdecea;padding:4px 8px;margin:3px 0;border-radius:4px'>"
-                    f"<b>{esc(usname(c['Symbol']).upper())}</b> [{esc(c['Symbol'])} · {esc(usexch(c['Symbol']))}] — "
-                    f"{esc(c['Tier'])}, news <b>{c['News_Score']:.2f}</b> ({c['N_Articles']} art.): "
-                    f"<i>{esc(c['Top_Headline'])}…</i></li>")
+            out += (
+                f"<li style='background:#fdecea;padding:4px 8px;margin:3px 0;border-radius:4px'>"
+                f"<b>{esc(usname(c['Symbol']).upper())}</b> [{esc(c['Symbol'])} · {esc(usexch(c['Symbol']))}] — "
+                f"{esc(c['Tier'])}, news <b>{c['News_Score']:.2f}</b> ({c['N_Articles']} art.): "
+                f"<i>{esc(c['Top_Headline'])}…</i></li>"
+            )
         out += "</ul>"
     else:
         out += "<p style='color:#666'>None today.</p>"
@@ -344,9 +505,11 @@ def conv_section():
     if eu_conv_hi:
         out += "<ul style='margin:4px 0'>"
         for c in eu_conv_hi:
-            out += (f"<li style='background:#e8f5e9;padding:4px 8px;margin:3px 0;border-radius:4px'>"
-                    f"<b>{esc(c['name'].upper())}</b> [{esc(c['exch'])}] — {esc(c['tier'])}, "
-                    f"news <b>+{c['score']:.2f}</b> ({c['n_articles']} art.): <i>{esc(c['headline'])[:90]}…</i></li>")
+            out += (
+                f"<li style='background:#e8f5e9;padding:4px 8px;margin:3px 0;border-radius:4px'>"
+                f"<b>{esc(c['name'].upper())}</b> [{esc(c['exch'])}] — {esc(c['tier'])}, "
+                f"news <b>+{c['score']:.2f}</b> ({c['n_articles']} art.): <i>{esc(c['headline'])[:90]}…</i></li>"
+            )
         out += "</ul>"
     else:
         out += "<p style='color:#666'>None today.</p>"
@@ -354,64 +517,100 @@ def conv_section():
     if eu_conv_cau:
         out += "<ul style='margin:4px 0'>"
         for c in eu_conv_cau:
-            out += (f"<li style='background:#fdecea;padding:4px 8px;margin:3px 0;border-radius:4px'>"
-                    f"<b>{esc(c['name'].upper())}</b> [{esc(c['exch'])}] — {esc(c['tier'])}, "
-                    f"news <b>{c['score']:.2f}</b> ({c['n_articles']} art.): <i>{esc(c['headline'])[:90]}…</i></li>")
+            out += (
+                f"<li style='background:#fdecea;padding:4px 8px;margin:3px 0;border-radius:4px'>"
+                f"<b>{esc(c['name'].upper())}</b> [{esc(c['exch'])}] — {esc(c['tier'])}, "
+                f"news <b>{c['score']:.2f}</b> ({c['n_articles']} art.): <i>{esc(c['headline'])[:90]}…</i></li>"
+            )
         out += "</ul>"
     else:
         out += "<p style='color:#666'>None today.</p>"
     return out
 
+
 # ---------------------------------------------------------------- Component 2
 def mood_html(j, region):
-    m = j["mood"]; col = {"POSITIVE":"#2e7d32","NEGATIVE":"#c62828","NEUTRAL":"#f57f17"}.get(m["mood"], "#555")
+    m = j["mood"]
+    col = {"POSITIVE": "#2e7d32", "NEGATIVE": "#c62828", "NEUTRAL": "#f57f17"}.get(
+        m["mood"], "#555"
+    )
     outlets = " · ".join(m.get("by_outlet", {}).keys()) or "wire feeds"
-    return (f"<p style='margin:6px 0'><b>{region} market mood:</b> "
-            f"<b style='color:{col}'>{m['mood']} ({m['score']:+.2f})</b> from {m['n_articles']} live articles ({esc(outlets)})</p>")
+    return (
+        f"<p style='margin:6px 0'><b>{region} market mood:</b> "
+        f"<b style='color:{col}'>{m['mood']} ({m['score']:+.2f})</b> from {m['n_articles']} live articles ({esc(outlets)})</p>"
+    )
+
 
 def talk_table(j, cur):
     rows = ""
     for sym, t in j["talk"].items():
-        if t.get("n_articles", 0) <= 0 or t.get("label") == "NO_DATA": continue
-        lab = t["label"]; col = {"POSITIVE":"#2e7d32","NEGATIVE":"#c62828","NEUTRAL":"#f57f17"}.get(lab, "#555")
+        if t.get("n_articles", 0) <= 0 or t.get("label") == "NO_DATA":
+            continue
+        lab = t["label"]
+        col = {"POSITIVE": "#2e7d32", "NEGATIVE": "#c62828", "NEUTRAL": "#f57f17"}.get(lab, "#555")
         hl = (t.get("headlines") or [""])[0]
         nm = usname(sym).upper() if cur == "$" else sym
-        rows += (f"<tr><td style='padding:6px 8px;border-bottom:1px solid #eee'><b>{esc(nm)}</b> "
-                 f"<span style='color:#666;font-size:12px'>[{esc(sym)}]</span></td>"
-                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee;color:{col}'><b>{esc(lab)}</b></td>"
-                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:right'>{t['score']:+.2f}</td>"
-                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:center'>{t['n_articles']}</td>"
-                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee;font-size:12px'>{esc(hl)[:90]}</td></tr>")
-    hdr = ("<tr style='background:#374151;color:#fff'><th style='padding:8px;text-align:left'>Company [Ticker]</th>"
-           "<th style='padding:8px'>Sentiment</th><th style='padding:8px'>Score</th>"
-           "<th style='padding:8px'>Articles</th><th style='padding:8px;text-align:left'>Top headline</th></tr>")
-    body = rows or "<tr><td colspan=5 style='padding:6px 8px;color:#666'>No per-ticker news coverage matched today's picks.</td></tr>"
+        rows += (
+            f"<tr><td style='padding:6px 8px;border-bottom:1px solid #eee'><b>{esc(nm)}</b> "
+            f"<span style='color:#666;font-size:12px'>[{esc(sym)}]</span></td>"
+            f"<td style='padding:6px 8px;border-bottom:1px solid #eee;color:{col}'><b>{esc(lab)}</b></td>"
+            f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:right'>{t['score']:+.2f}</td>"
+            f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:center'>{t['n_articles']}</td>"
+            f"<td style='padding:6px 8px;border-bottom:1px solid #eee;font-size:12px'>{esc(hl)[:90]}</td></tr>"
+        )
+    hdr = (
+        "<tr style='background:#374151;color:#fff'><th style='padding:8px;text-align:left'>Company [Ticker]</th>"
+        "<th style='padding:8px'>Sentiment</th><th style='padding:8px'>Score</th>"
+        "<th style='padding:8px'>Articles</th><th style='padding:8px;text-align:left'>Top headline</th></tr>"
+    )
+    body = (
+        rows
+        or "<tr><td colspan=5 style='padding:6px 8px;color:#666'>No per-ticker news coverage matched today's picks.</td></tr>"
+    )
     return f"<table style='width:100%;border-collapse:collapse;font-size:13px'>{hdr}{body}</table>"
+
 
 def eu_mood_html():
     if not eu_mood or "mood" not in eu_mood:
-        return "<p style='margin:6px 0'><b>🇪🇺 Europe market mood:</b> feed unavailable this run.</p>"
-    col = {"POSITIVE":"#2e7d32","NEGATIVE":"#c62828","NEUTRAL":"#f57f17"}.get(eu_mood["mood"], "#555")
+        return (
+            "<p style='margin:6px 0'><b>🇪🇺 Europe market mood:</b> feed unavailable this run.</p>"
+        )
+    col = {"POSITIVE": "#2e7d32", "NEGATIVE": "#c62828", "NEUTRAL": "#f57f17"}.get(
+        eu_mood["mood"], "#555"
+    )
     outlets = " · ".join(eu_mood.get("by_outlet", {}).keys()) or "EU feeds"
-    return (f"<p style='margin:6px 0'><b>🇪🇺 Europe market mood:</b> "
-            f"<b style='color:{col}'>{eu_mood['mood']} ({eu_mood['score']:+.2f})</b> "
-            f"from {eu_mood['n_articles']} live articles ({esc(outlets)})</p>")
+    return (
+        f"<p style='margin:6px 0'><b>🇪🇺 Europe market mood:</b> "
+        f"<b style='color:{col}'>{eu_mood['mood']} ({eu_mood['score']:+.2f})</b> "
+        f"from {eu_mood['n_articles']} live articles ({esc(outlets)})</p>"
+    )
+
 
 def eu_talk_table():
     rows = ""
     for sym, t in sorted(eu_talk.items(), key=lambda x: -x[1]["score"]):
-        col = {"POSITIVE":"#2e7d32","NEGATIVE":"#c62828","NEUTRAL":"#f57f17"}.get(t["label"], "#555")
-        rows += (f"<tr><td style='padding:6px 8px;border-bottom:1px solid #eee'><b>{esc(t['name'].upper())}</b> "
-                 f"<span style='color:#666;font-size:12px'>[{esc(sym)} · {esc(t['exch'])}]</span></td>"
-                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee;color:{col}'><b>{esc(t['label'])}</b></td>"
-                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:right'>{t['score']:+.2f}</td>"
-                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:center'>{t['n_articles']}</td>"
-                 f"<td style='padding:6px 8px;border-bottom:1px solid #eee;font-size:12px'>{esc(t['headline'])[:90]}</td></tr>")
-    hdr = ("<tr style='background:#374151;color:#fff'><th style='padding:8px;text-align:left'>Company [Ticker · Exch]</th>"
-           "<th style='padding:8px'>Sentiment</th><th style='padding:8px'>Score</th>"
-           "<th style='padding:8px'>Articles</th><th style='padding:8px;text-align:left'>Top headline</th></tr>")
-    body = rows or "<tr><td colspan=5 style='padding:6px 8px;color:#666'>No European pick was named in today's news flow.</td></tr>"
+        col = {"POSITIVE": "#2e7d32", "NEGATIVE": "#c62828", "NEUTRAL": "#f57f17"}.get(
+            t["label"], "#555"
+        )
+        rows += (
+            f"<tr><td style='padding:6px 8px;border-bottom:1px solid #eee'><b>{esc(t['name'].upper())}</b> "
+            f"<span style='color:#666;font-size:12px'>[{esc(sym)} · {esc(t['exch'])}]</span></td>"
+            f"<td style='padding:6px 8px;border-bottom:1px solid #eee;color:{col}'><b>{esc(t['label'])}</b></td>"
+            f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:right'>{t['score']:+.2f}</td>"
+            f"<td style='padding:6px 8px;border-bottom:1px solid #eee;text-align:center'>{t['n_articles']}</td>"
+            f"<td style='padding:6px 8px;border-bottom:1px solid #eee;font-size:12px'>{esc(t['headline'])[:90]}</td></tr>"
+        )
+    hdr = (
+        "<tr style='background:#374151;color:#fff'><th style='padding:8px;text-align:left'>Company [Ticker · Exch]</th>"
+        "<th style='padding:8px'>Sentiment</th><th style='padding:8px'>Score</th>"
+        "<th style='padding:8px'>Articles</th><th style='padding:8px;text-align:left'>Top headline</th></tr>"
+    )
+    body = (
+        rows
+        or "<tr><td colspan=5 style='padding:6px 8px;color:#666'>No European pick was named in today's news flow.</td></tr>"
+    )
     return f"<table style='width:100%;border-collapse:collapse;font-size:13px'>{hdr}{body}</table>"
+
 
 def _read_frag(name):
     """Darvas fragments: prefer a stable ~/Downloads copy, fall back to the
@@ -420,13 +619,17 @@ def _read_frag(name):
         if os.path.exists(p):
             return open(p).read()
     return f'<p style="font-size:12px;color:#888">📈 Darvas fragment {name} not found this run.</p>'
+
+
 in_darvas = _read_frag("in_darvas.html")
 us_darvas = _read_frag("us_darvas.html")
 
 today = datetime.date(2026, 7, 9)
 datestr = today.strftime("%d %b %Y")
 now = datetime.datetime.now().strftime("%d %b %Y %H:%M")
-n_conv = len([c for c in usj["convergence"] if "BOTH BULLISH" in c.get("Convergence","")]) + len(eu_conv_hi)
+n_conv = len([c for c in usj["convergence"] if "BOTH BULLISH" in c.get("Convergence", "")]) + len(
+    eu_conv_hi
+)
 n_fund = len(us_picks) + len(eu_pick_all)
 mood_lbl = usj["mood"]["mood"]
 
@@ -509,8 +712,11 @@ open(out_path, "w").write(email)
 # resting on a theme-aware desk. Body content only — the Artifact host adds the
 # doctype/head/body skeleton.
 import re as _re
+
+
 def wrap_tables(hpage):
     return _re.sub(r"(<table\b.*?</table>)", r'<div class="trail">\1</div>', hpage, flags=_re.S)
+
 
 artifact = f"""<style>
 :root {{
@@ -560,7 +766,7 @@ body {{ margin:0; }}
   </article>
   <div class="deskfoot">Educational / research only — not investment advice. Regenerated each weekday morning.</div>
 </div>"""
-art_path = os.path.expanduser(f"~/Downloads/daily_market_report_artifact.html")
+art_path = os.path.expanduser("~/Downloads/daily_market_report_artifact.html")
 open(art_path, "w").write(artifact)
 
 # also print subject line for the sender step

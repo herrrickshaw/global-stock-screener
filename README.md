@@ -36,6 +36,9 @@ python run.py --list                  # all strategies & markets
 `run.py` auto-bootstraps the cached data into a fast local store on first use, then
 prints results and saves them to `results/`.
 
+**Check readiness anytime:** `python preflight.py` verifies the initial conditions
+(LFS data pulled, packages, serving views); `python preflight.py --ensure` establishes them.
+
 ---
 
 ## What you get
@@ -74,15 +77,24 @@ and the LMDB store (round-trip on a temp cache).
 
 | Doc | What's inside |
 |-----|---------------|
+| `FEATURES.md` | **capability catalog — every feature + how to run it** |
 | `HOW_IT_WORKS.md` | step-by-step walk-through (bootstrap → screen → refresh → outputs) |
 | `SCREENER_ACCESS.md` | how to provide screener.in creds (env vars) for India fundamentals |
 | `DATA_SCHEMA_AND_ARCHITECTURE.md` | **full architecture map + data schemas (Mermaid diagrams)** |
+| `TOGAF.md` / `governance.py` | **TOGAF EA alignment** (principles, ADM map) + executable governance check |
+| `AGILE.md` / `backlog.py` | **SAFe operating model** + executable WSJF-prioritised backlog / PI planning |
 | `ARCHITECTURE.md` | layered diagram, request→result flow, data schemas |
 | `MEMORY_ARCHITECTURE.md` / `DATA_LINKAGE.md` / `AUTO_SCREENER.md` | tiered memory, linkage layer, ML/auto-screener |
 | `DATA_AND_MODULES.md` | every data source + a one-line purpose for each module |
+| `DATA_SOURCES.md` | **data sources: used capability + unused potential for future analysis** |
+| `query.py` | **DuckDB SQL layer over the parquet seeds** (range/aggregate queries) |
+| `partition_ltm.py` | **year-partition the LTM** (Hive market=/year=) for pruned queries at scale |
 | `BLOOMBERG_SOURCES.md` | Bloomberg-terminal data categories → free/official equivalents |
 | `EXCHANGE_COVERAGE.md` | the 20 markets validated vs Wikipedia's major exchanges |
 | `colab_quickstart.ipynb` | run-top-to-bottom Colab notebook |
+| `notebooks/` | **Colab checkpoint notebooks** for the data / screening / ML layers |
+| `BRANCHES.md` | branch map (core on `main`, legacy on `archive/*`) |
+| `DEPENDENCIES.md` | **code+data interdependency map** (blast radius for fixes) — `dep_map.py` |
 
 ## Repo layout
 

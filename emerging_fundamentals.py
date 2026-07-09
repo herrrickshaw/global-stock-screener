@@ -39,12 +39,13 @@ Public API
 """
 import os
 import time
+
 import requests
 
 _TIMEOUT = 20
 _UA = {"User-Agent": "Mozilla/5.0 (compatible; market-report/1.0)"}
 _LAST_CALL = {"t": 0.0}
-_MIN_INTERVAL = 0.20   # be polite to free tiers
+_MIN_INTERVAL = 0.20  # be polite to free tiers
 
 
 def _throttle():
@@ -73,9 +74,17 @@ def score_from_statements(inc, bal, cf, profile):
     """Compute Piotroski F-score (0–9) + Coffee-Can (0–6) from normalised
     statements. Mirrors full_european_market_scan.fundamental_scan exactly so
     downstream scoring/PE-zone logic is identical across data sources."""
-    res = {"f_score": None, "cc_qualifies": "FAIL", "cc_score": None,
-           "cc_rev_cagr": None, "cc_roce_avg": None, "cc_debt_equity": None,
-           "pe_ratio": None, "sector": None, "error": None}
+    res = {
+        "f_score": None,
+        "cc_qualifies": "FAIL",
+        "cc_score": None,
+        "cc_rev_cagr": None,
+        "cc_roce_avg": None,
+        "cc_debt_equity": None,
+        "pe_ratio": None,
+        "sector": None,
+        "error": None,
+    }
     profile = profile or {}
     res["sector"] = profile.get("sector")
     pe = profile.get("pe")
@@ -85,8 +94,10 @@ def score_from_statements(inc, bal, cf, profile):
         res["error"] = "no_financial_statements"
         return res
 
-    i0 = inc[0]; i1 = inc[1] if len(inc) > 1 else {}
-    b0 = bal[0]; b1 = bal[1] if len(bal) > 1 else {}
+    i0 = inc[0]
+    i1 = inc[1] if len(inc) > 1 else {}
+    b0 = bal[0]
+    b1 = bal[1] if len(bal) > 1 else {}
     c0 = cf[0] if cf else {}
 
     # ── Piotroski F-score (9 points) ──
@@ -126,12 +137,18 @@ def score_from_statements(inc, bal, cf, profile):
     try:
         c = {}
         revs = [_g(x, "revenue") for x in inc if _g(x, "revenue")]
-        cagr = ((revs[0] / revs[-1]) ** (1 / (len(revs) - 1)) - 1) * 100 if len(revs) >= 2 and revs[-1] > 0 else None
+        cagr = (
+            ((revs[0] / revs[-1]) ** (1 / (len(revs) - 1)) - 1) * 100
+            if len(revs) >= 2 and revs[-1] > 0
+            else None
+        )
         c["C1"] = 1 if (cagr and cagr > 10) else 0
 
         roce_l = []
         for i, b in zip(inc, bal):
-            ebit = _g(i, "ebit"); ta = _g(b, "total_assets"); cl = _g(b, "current_liabilities")
+            ebit = _g(i, "ebit")
+            ta = _g(b, "total_assets")
+            cl = _g(b, "current_liabilities")
             if ebit is not None and ta and cl is not None and (ta - cl) > 0:
                 roce_l.append(ebit / (ta - cl) * 100)
         avg_roce = sum(roce_l) / len(roce_l) if roce_l else None
@@ -154,17 +171,20 @@ def score_from_statements(inc, bal, cf, profile):
 
         fcf0 = _g(c0, "free_cash_flow")
         if fcf0 is None:
-            ocf = _g(c0, "operating_cash_flow"); cap = _g(c0, "capex")
+            ocf = _g(c0, "operating_cash_flow")
+            cap = _g(c0, "capex")
             fcf0 = (ocf - abs(cap)) if (ocf is not None and cap is not None) else None
         c["C6"] = 1 if (fcf0 is not None and fcf0 > 0) else 0
 
-        res.update({
-            "cc_qualifies": "PASS" if sum(c.values()) == len(c) else "FAIL",
-            "cc_score": f"{sum(c.values())}/{len(c)}",
-            "cc_rev_cagr": round(cagr, 2) if cagr else None,
-            "cc_roce_avg": round(avg_roce, 2) if avg_roce else None,
-            "cc_debt_equity": round(de, 2) if de else None,
-        })
+        res.update(
+            {
+                "cc_qualifies": "PASS" if sum(c.values()) == len(c) else "FAIL",
+                "cc_score": f"{sum(c.values())}/{len(c)}",
+                "cc_rev_cagr": round(cagr, 2) if cagr else None,
+                "cc_roce_avg": round(avg_roce, 2) if avg_roce else None,
+                "cc_debt_equity": round(de, 2) if de else None,
+            }
+        )
     except Exception:
         pass
 
@@ -202,17 +222,35 @@ class _FMP:
             return None
         prof = self._get(f"profile/{ticker}") or []
         quote = self._get(f"quote/{ticker}") or []
-        sector = (prof[0].get("sector") if prof else None)
-        pe = (quote[0].get("pe") if quote else None)
-        inc = [{"net_income": r.get("netIncome"), "revenue": r.get("revenue"),
-                "gross_profit": r.get("grossProfit"), "ebit": r.get("operatingIncome") or r.get("ebitda"),
-                "shares": r.get("weightedAverageShsOut")} for r in inc_raw]
-        bal = [{"total_assets": r.get("totalAssets"), "long_term_debt": r.get("longTermDebt"),
+        sector = prof[0].get("sector") if prof else None
+        pe = quote[0].get("pe") if quote else None
+        inc = [
+            {
+                "net_income": r.get("netIncome"),
+                "revenue": r.get("revenue"),
+                "gross_profit": r.get("grossProfit"),
+                "ebit": r.get("operatingIncome") or r.get("ebitda"),
+                "shares": r.get("weightedAverageShsOut"),
+            }
+            for r in inc_raw
+        ]
+        bal = [
+            {
+                "total_assets": r.get("totalAssets"),
+                "long_term_debt": r.get("longTermDebt"),
                 "current_assets": r.get("totalCurrentAssets"),
-                "current_liabilities": r.get("totalCurrentLiabilities")} for r in bal_raw]
-        cf = [{"operating_cash_flow": r.get("operatingCashFlow"),
-               "free_cash_flow": r.get("freeCashFlow"),
-               "capex": r.get("capitalExpenditure")} for r in (cf_raw or [])]
+                "current_liabilities": r.get("totalCurrentLiabilities"),
+            }
+            for r in bal_raw
+        ]
+        cf = [
+            {
+                "operating_cash_flow": r.get("operatingCashFlow"),
+                "free_cash_flow": r.get("freeCashFlow"),
+                "capex": r.get("capitalExpenditure"),
+            }
+            for r in (cf_raw or [])
+        ]
         return inc, bal, cf, {"pe": pe, "sector": sector}
 
 
@@ -248,17 +286,38 @@ class _TwelveData:
             return None
         quote = self._get("quote", symbol=ticker) or {}
         prof = self._get("profile", symbol=ticker) or {}
-        inc = [{"net_income": r.get("net_income"), "revenue": r.get("sales") or r.get("revenue"),
-                "gross_profit": r.get("gross_profit"), "ebit": r.get("operating_income"),
-                "shares": r.get("basic_shares_outstanding")} for r in stmts]
-        bal = [{"total_assets": (r.get("assets") or {}).get("total_assets") if isinstance(r.get("assets"), dict) else r.get("total_assets"),
+        inc = [
+            {
+                "net_income": r.get("net_income"),
+                "revenue": r.get("sales") or r.get("revenue"),
+                "gross_profit": r.get("gross_profit"),
+                "ebit": r.get("operating_income"),
+                "shares": r.get("basic_shares_outstanding"),
+            }
+            for r in stmts
+        ]
+        bal = [
+            {
+                "total_assets": (
+                    (r.get("assets") or {}).get("total_assets")
+                    if isinstance(r.get("assets"), dict)
+                    else r.get("total_assets")
+                ),
                 "long_term_debt": r.get("long_term_debt"),
                 "current_assets": r.get("total_current_assets"),
-                "current_liabilities": r.get("total_current_liabilities")} for r in bsts]
+                "current_liabilities": r.get("total_current_liabilities"),
+            }
+            for r in bsts
+        ]
         cfl = (cf_raw or {}).get("cash_flow") or []
-        cf = [{"operating_cash_flow": r.get("operating_cash_flow"),
-               "free_cash_flow": r.get("free_cash_flow"),
-               "capex": r.get("capital_expenditures")} for r in cfl]
+        cf = [
+            {
+                "operating_cash_flow": r.get("operating_cash_flow"),
+                "free_cash_flow": r.get("free_cash_flow"),
+                "capex": r.get("capital_expenditures"),
+            }
+            for r in cfl
+        ]
         return inc, bal, cf, {"pe": quote.get("pe") or prof.get("pe"), "sector": prof.get("sector")}
 
 
@@ -296,7 +355,9 @@ def get_fundamentals(ticker):
 
 
 if __name__ == "__main__":
-    import sys, json
+    import json
+    import sys
+
     print("available source:", available_source())
     for t in sys.argv[1:]:
         print(t, "->", json.dumps(get_fundamentals(t)))

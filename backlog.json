@@ -1,0 +1,233 @@
+[
+  {
+    "id": "F-01",
+    "type": "Feature",
+    "title": "FII/DII flows + India VIX regime signal",
+    "value": 13,
+    "time_criticality": 8,
+    "risk": 8,
+    "job_size": 8,
+    "status": "done",
+    "epic": "Smart-money signals"
+  },
+  {
+    "id": "F-02",
+    "type": "Feature",
+    "title": "Map 45 NO-DATA delisted/renamed tickers",
+    "value": 8,
+    "time_criticality": 5,
+    "risk": 3,
+    "job_size": 3,
+    "status": "done",
+    "epic": "Data quality"
+  },
+  {
+    "id": "F-03",
+    "type": "Feature",
+    "title": "Clamp absurd P/E (near-zero EPS) in decision engine",
+    "value": 5,
+    "time_criticality": 5,
+    "risk": 5,
+    "job_size": 1,
+    "status": "done",
+    "epic": "Data quality"
+  },
+  {
+    "id": "F-04",
+    "type": "Feature",
+    "title": "Trendlyne DVM scores + promoter pledge into decision factors",
+    "value": 13,
+    "time_criticality": 5,
+    "risk": 5,
+    "job_size": 5,
+    "status": "done",
+    "epic": "Fundamentals depth"
+  },
+  {
+    "id": "F-05",
+    "type": "Feature",
+    "title": "Deepen thin LTMs past 252 bars (full 1y momentum)",
+    "value": 8,
+    "time_criticality": 3,
+    "risk": 3,
+    "job_size": 5,
+    "status": "done",
+    "epic": "Data depth"
+  },
+  {
+    "id": "F-06",
+    "type": "Feature",
+    "title": "Dividend/split-adjusted total-return series",
+    "value": 8,
+    "time_criticality": 2,
+    "risk": 3,
+    "job_size": 5,
+    "status": "done",
+    "epic": "Data quality"
+  },
+  {
+    "id": "F-07",
+    "type": "Feature",
+    "title": "Factor regressions (Fama-French) attribution",
+    "value": 8,
+    "time_criticality": 2,
+    "risk": 2,
+    "job_size": 8,
+    "status": "done",
+    "epic": "Analytics"
+  },
+  {
+    "id": "F-08",
+    "type": "Feature",
+    "title": "PPO/SB3 upgrade path for the RL trade agent",
+    "value": 5,
+    "time_criticality": 1,
+    "risk": 2,
+    "job_size": 13,
+    "status": "done",
+    "epic": "ML"
+  },
+  {
+    "id": "F-D1",
+    "type": "Feature",
+    "title": "Delivery-% accumulation signal",
+    "value": 13,
+    "time_criticality": 8,
+    "risk": 8,
+    "job_size": 5,
+    "status": "done",
+    "epic": "Smart-money signals"
+  },
+  {
+    "id": "F-D2",
+    "type": "Feature",
+    "title": "Sector classification + rotation",
+    "value": 13,
+    "time_criticality": 5,
+    "risk": 5,
+    "job_size": 5,
+    "status": "done",
+    "epic": "Analytics"
+  },
+  {
+    "id": "F-D3",
+    "type": "Feature",
+    "title": "Trendlyne fundamentals source (P/E, ROE, +)",
+    "value": 13,
+    "time_criticality": 8,
+    "risk": 5,
+    "job_size": 5,
+    "status": "done",
+    "epic": "Fundamentals depth"
+  },
+  {
+    "id": "F-09",
+    "type": "Feature",
+    "title": "Delivery-% accumulation factor in decision engine",
+    "value": 13,
+    "time_criticality": 8,
+    "risk": 5,
+    "job_size": 3,
+    "status": "done",
+    "epic": "Smart-money signals"
+  },
+  {
+    "id": "F-10",
+    "type": "Feature",
+    "title": "Sector-boom gating in auto-screener (doc Layer-2 Track A)",
+    "value": 13,
+    "time_criticality": 5,
+    "risk": 5,
+    "job_size": 5,
+    "status": "done",
+    "epic": "ML"
+  },
+  {
+    "id": "F-11",
+    "type": "Epic",
+    "title": "Portfolio-level analytics (concentration, factor exposure, rebalance)",
+    "value": 13,
+    "time_criticality": 3,
+    "risk": 3,
+    "job_size": 8,
+    "status": "done",
+    "epic": "Investor tools"
+  },
+  {
+    "id": "F-12",
+    "type": "Feature",
+    "title": "Walk-forward backtest of screens/decisions (quantify edge)",
+    "value": 13,
+    "time_criticality": 3,
+    "risk": 8,
+    "job_size": 8,
+    "status": "done",
+    "epic": "Analytics"
+  },
+  {
+    "id": "F-13",
+    "type": "Feature",
+    "title": "CDC watchlist-delta daily mailer (signal flips, new BUYs, pledge spikes)",
+    "value": 8,
+    "time_criticality": 5,
+    "risk": 3,
+    "job_size": 5,
+    "status": "done",
+    "epic": "Ops"
+  },
+  {
+    "id": "F-14",
+    "type": "Feature",
+    "title": "10y + quarterly fundamentals & shareholding-trend screens",
+    "value": 8,
+    "time_criticality": 3,
+    "risk": 3,
+    "job_size": 8,
+    "status": "done",
+    "epic": "Fundamentals depth"
+  },
+  {
+    "id": "F-15",
+    "type": "Feature",
+    "title": "Corporate-actions & results calendar (event-aware screening)",
+    "value": 8,
+    "time_criticality": 5,
+    "risk": 3,
+    "job_size": 5,
+    "status": "done",
+    "epic": "Data breadth"
+  },
+  {
+    "id": "F-16",
+    "type": "Feature",
+    "title": "Scheduled autonomous daily run + brief (cron/launchd + mailer)",
+    "value": 8,
+    "time_criticality": 5,
+    "risk": 2,
+    "job_size": 3,
+    "status": "done",
+    "epic": "Ops"
+  },
+  {
+    "id": "F-17",
+    "type": "Feature",
+    "title": "FastAPI surface over query + portfolio evaluator",
+    "value": 8,
+    "time_criticality": 2,
+    "risk": 3,
+    "job_size": 8,
+    "status": "done",
+    "epic": "Platform"
+  },
+  {
+    "id": "F-18",
+    "type": "Feature",
+    "title": "Superstar-investor / bulk-block-deal holdings screen",
+    "value": 8,
+    "time_criticality": 3,
+    "risk": 3,
+    "job_size": 5,
+    "status": "done",
+    "epic": "Smart-money signals"
+  }
+]
