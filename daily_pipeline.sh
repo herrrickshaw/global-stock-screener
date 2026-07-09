@@ -32,24 +32,17 @@ done
 {
   echo "=== Daily ETL pipeline $(date) ==="
 
-  echo "[extract] India EOD refresh + IN/US combined reports (fundamentals + street talk)"
+  echo "[prep] India EOD refresh + IN/US combined reports (fundamentals + street talk)"
   $PY bhavcopy_history.py 400                       || echo "  bhavcopy refresh failed (using cache)"
   $PY scan_bhavcopy.py                              || echo "  India scan failed (using cache)"
   $PY daily_combined_report.py --market IN --html   || echo "  IN combined report failed"
   $PY daily_combined_report.py --market US --html   || echo "  US combined report failed"
 
-  echo "[extract] European broad scan (~1,000 stocks, 22 exchanges)"
-  $PY full_european_market_scan.py --universe data/europe_broad_list.csv --label broad --batch 120 \
-                                                    || echo "  EU scan failed (ETL will reuse latest)"
-
-  echo "[extract] Darvas breakout fragments (IN + US)"
-  $PY darvas_breakouts.py --market IN --top 15 > "$HOME/Downloads/in_darvas.html" 2>/dev/null \
-                                                    || echo "  IN darvas fragment failed"
-  $PY darvas_breakouts.py --market US --top 15 > "$HOME/Downloads/us_darvas.html" 2>/dev/null \
-                                                    || echo "  US darvas fragment failed"
-
-  echo "[etl] structured Extract → Transform (curate parquet) → Load (report + email + manifest)"
-  $PY etl_pipeline.py --phase all --markets US,EU,IN $SEND_FLAG \
+  # The ETL now owns the market scans (EU local + US/IN via the GMS repo,
+  # rebuilt when stale via --refresh-scans) and the Darvas fragments, then
+  # curates → builds the report → emails (token-free) → writes the manifest.
+  echo "[etl] Extract (auto-rescan stale) → Transform → Load (report + email + manifest)"
+  $PY etl_pipeline.py --phase all --markets US,EU,IN --refresh-scans $SEND_FLAG \
                                                     || echo "  etl_pipeline failed"
 
   echo "=== done $(date) ==="

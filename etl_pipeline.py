@@ -48,6 +48,28 @@ import numpy as np
 import pandas as pd
 
 BASE = os.path.expanduser("~/Downloads/code/python_files")
+
+
+def _load_dotenv(path=None):
+    """Minimal no-dependency .env loader. Reads KEY=VALUE lines from ./.env into
+    os.environ WITHOUT overriding values already set in the environment
+    (launchd/shell env wins). Quotes stripped; #comments and blanks ignored."""
+    path = path or os.path.join(BASE, ".env")
+    if not os.path.exists(path):
+        return
+    for raw in open(path):
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = val
+
+
+_load_dotenv()
+
 RUN_DATE = date.today().isoformat()
 RAW = os.path.join(BASE, "data", "raw", RUN_DATE)
 CURATED = os.path.join(BASE, "data", "curated")
@@ -61,6 +83,25 @@ SCAN_GLOBS = {
     "US": "us_full_scan/us_full_scan_*.xlsx",
     "EU": "european_scan/european_market_scan_broad_*.xlsx",
     "IN": "indian_full_scan/indian_full_scan_*.xlsx",
+}
+
+# How to (re)build each market's scan when it's stale/missing (--refresh-scans).
+# All run with cwd=BASE so their relative ./<market>_full_scan output dirs land
+# where the ETL looks. EU is a local script; US/IN live in the GMS repo.
+GMS_REPO = os.path.expanduser(os.environ.get("GMS_REPO", "~/repos/global-market-scanners"))
+GMS_TOP = os.environ.get("GMS_TOP", "0")  # 0 = full universe
+RESCAN_CMD = {
+    "EU": [
+        "full_european_market_scan.py",
+        "--universe",
+        "data/europe_broad_list.csv",
+        "--label",
+        "broad",
+        "--batch",
+        "120",
+    ],
+    "US": [os.path.join(GMS_REPO, "full_us_market_scan.py"), "--top", GMS_TOP],
+    "IN": [os.path.join(GMS_REPO, "full_indian_market_scan.py"), "--top", GMS_TOP],
 }
 FUND_SHEET = {
     "US": "All_Fundamentals",
@@ -78,10 +119,11 @@ def _latest(patt):
 class Ctx:
     """Carries artifacts + lineage between stages within one run."""
 
-    def __init__(self, markets, force, no_send=False):
+    def __init__(self, markets, force, no_send=False, refresh_scans=False):
         self.markets = markets
         self.force = force
         self.no_send = no_send
+        self.refresh_scans = refresh_scans
         self.artifacts = {}  # logical name -> path
         self.rows = {}  # logical name -> row count
         self.lineage = {}  # output -> [inputs]
@@ -131,27 +173,78 @@ def extract_universe(ctx):
     return "ok"
 
 
+def _rescan(market):
+    """Run a market's scan script (cwd=BASE) to refresh its workbook. Returns
+    (ok, message). Skips gracefully if the script isn't present."""
+    cmd = RESCAN_CMD.get(market)
+    if not cmd:
+        return False, "no rescan command"
+    script = cmd[0] if os.path.isabs(cmd[0]) else os.path.join(BASE, cmd[0])
+    if not os.path.exists(script):
+        return (
+            False,
+            f"scan script not found ({os.path.relpath(script, BASE) if script.startswith(BASE) else script})",
+        )
+    r = subprocess.run([sys.executable, script, *cmd[1:]], cwd=BASE, capture_output=True, text=True)
+    return (r.returncode == 0), (
+        "rescanned"
+        if r.returncode == 0
+        else f"rescan failed: {(r.stderr or r.stdout).strip().splitlines()[-1][:80] if (r.stderr or r.stdout) else 'rc=%d' % r.returncode}"
+    )
+
+
 @stage("extract_market_scans", "E")
 def extract_market_scans(ctx):
     """Locate each market's scan workbook (the raw OHLC+fundamentals extract).
-    We reuse today's workbook if present; a full re-scan is a heavy job left to
-    the scan scripts (full_european_market_scan.py etc.) and is only *flagged*
-    as stale here, never silently skipped."""
-    stale = []
+    Reuse today's workbook if present; if stale/missing and --refresh-scans is
+    set, trigger the market's scan script to rebuild it, then re-locate."""
+    notes = []
     for m in ctx.markets:
         patt = SCAN_GLOBS.get(m)
         wb = _latest(patt) if patt else None
-        if not wb:
-            ctx.notes.setdefault("extract_market_scans", []).append(f"{m}: NO scan workbook found")
+        stale = wb and datetime.fromtimestamp(os.path.getmtime(wb)).date().isoformat() != RUN_DATE
+        if (not wb or stale) and ctx.refresh_scans:
+            ok, msg = _rescan(m)
+            notes.append(f"{m}: {'stale' if wb else 'missing'} → {msg}")
+            if ok:
+                wb = _latest(patt)  # pick up the freshly written workbook
+        elif not wb:
+            notes.append(f"{m}: NO scan workbook (run with --refresh-scans to build)")
+        elif stale:
+            notes.append(f"{m}: stale ({os.path.basename(wb)}) — --refresh-scans to rebuild")
+        if wb:
+            ctx.artifacts[f"scan:{m}"] = wb
+    if notes:
+        ctx.notes["extract_market_scans"] = notes
+    return "ok"
+
+
+@stage("extract_darvas_fragments", "E")
+def extract_darvas_fragments(ctx):
+    """Regenerate the IN/US Darvas HTML fragments the report embeds — after the
+    scans are (re)fresh, so they reflect the latest workbooks."""
+    made = []
+    for m in ("IN", "US"):
+        if m not in ctx.markets:
             continue
-        fresh = datetime.fromtimestamp(os.path.getmtime(wb)).date().isoformat() == RUN_DATE
-        if not fresh:
-            stale.append(f"{m}:{os.path.basename(wb)}")
-        ctx.artifacts[f"scan:{m}"] = wb
-    if stale:
-        ctx.notes.setdefault("extract_market_scans", []).append(
-            "stale (not today) — re-run the scan script to refresh: " + ", ".join(stale)
+        dest = os.path.expanduser(f"~/Downloads/{m.lower()}_darvas.html")
+        r = subprocess.run(
+            [
+                sys.executable,
+                os.path.join(BASE, "darvas_breakouts.py"),
+                "--market",
+                m,
+                "--top",
+                "15",
+            ],
+            cwd=BASE,
+            capture_output=True,
+            text=True,
         )
+        if r.returncode == 0 and r.stdout.strip():
+            open(dest, "w").write(r.stdout)
+            made.append(m)
+    ctx.notes["extract_darvas_fragments"] = f"regenerated: {', '.join(made) or 'none'}"
     return "ok"
 
 
@@ -441,8 +534,8 @@ def load_manifest(ctx):
 
 
 # ─────────────────────────────── runner ───────────────────────────────
-def run(markets, phases, only_stage, force, dry, no_send=False):
-    ctx = Ctx(markets, force, no_send=no_send)
+def run(markets, phases, only_stage, force, dry, no_send=False, refresh_scans=False):
+    ctx = Ctx(markets, force, no_send=no_send, refresh_scans=refresh_scans)
     print(
         f"ETL run {RUN_DATE} | markets={','.join(markets)} | phases={','.join(phases)}"
         f"{' | STAGE='+only_stage if only_stage else ''}{' | FORCE' if force else ''}{' | DRY-RUN' if dry else ''}"
@@ -497,6 +590,11 @@ def main():
     ap.add_argument(
         "--no-send", action="store_true", help="build/save the report but do not email it"
     )
+    ap.add_argument(
+        "--refresh-scans",
+        action="store_true",
+        help="rebuild a market's scan workbook when it's stale/missing",
+    )
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     phases = (
@@ -505,7 +603,15 @@ def main():
         else [p.strip().upper() for p in args.phase.split(",")]
     )
     markets = [m.strip().upper() for m in args.markets.split(",")]
-    ctx = run(markets, phases, args.stage, args.force, args.dry_run, no_send=args.no_send)
+    ctx = run(
+        markets,
+        phases,
+        args.stage,
+        args.force,
+        args.dry_run,
+        no_send=args.no_send,
+        refresh_scans=args.refresh_scans,
+    )
     man = ctx.artifacts.get("manifest")
     if man:
         print(f"\nmanifest → {os.path.relpath(man, BASE)}")
