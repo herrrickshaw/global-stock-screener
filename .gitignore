@@ -78,4 +78,5 @@ data/curated/etl_runs/
 data/curated/*.md
 
 # SEC historical financials (derived — rebuild with sec_history_collector.py)
-cache_seed/fundamentals_history/
+cache_seed/fundamentals_history/*
+!cache_seed/fundamentals_history/*.parquet
