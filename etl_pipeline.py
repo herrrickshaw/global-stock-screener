@@ -489,17 +489,28 @@ def transform_hidden_gems(ctx):
 @stage("load_report", "L")
 def load_report(ctx):
     """Build the email HTML + Artifact page from the curated data (delegates to build_email.py)."""
+    env = dict(os.environ)
+    if ctx.hidden_gems:
+        env["HIDDEN_GEMS"] = "1"  # build_email → distinct artifact file + title
     r = subprocess.run(
         [sys.executable, os.path.join(BASE, "build_email.py")],
         capture_output=True,
         text=True,
         cwd=BASE,
+        env=env,
     )
     line = next((l for l in r.stdout.splitlines() if l.startswith("SUBJECT:")), "")
     ctx.notes["load_report"] = line or (r.stderr.splitlines()[-1] if r.stderr else "no output")
+    # Hidden-gems runs write a SEPARATE artifact file so they publish to a
+    # different Artifact URL than the fast morning report.
+    art_name = (
+        "daily_market_report_hiddengems_artifact.html"
+        if ctx.hidden_gems
+        else "daily_market_report_artifact.html"
+    )
     for name, src in [
         ("email", "daily_market_report_%s.html" % RUN_DATE),
-        ("artifact", "daily_market_report_artifact.html"),
+        ("artifact", art_name),
     ]:
         p = os.path.expanduser(f"~/Downloads/{src}")
         if os.path.exists(p):
