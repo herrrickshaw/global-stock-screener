@@ -15,7 +15,7 @@ by diffing the live BSE scrip list against the BSE rows already in IN.csv.
 
 First run per market SEEDS the baseline (no additions); later runs detect deltas.
 
-  python3 ipo_tracker.py                 # default markets: US, IN(+BSE), EU
+  python3 ipo_tracker.py                 # default: US, IN(+BSE), EU, TH, ID, MY, MX, IL
   python3 ipo_tracker.py US IN --seed    # seed baselines only, no update
   python3 ipo_tracker.py --no-apply      # detect + record only; don't edit CSVs
 """
@@ -129,7 +129,7 @@ def track(markets, seed=False, apply=True, verbose=True):
 
 def main():
     ap = argparse.ArgumentParser(description="Detect IPOs and add new stocks to the universe")
-    ap.add_argument("markets", nargs="*", help="markets (default: US IN EU)")
+    ap.add_argument("markets", nargs="*", help="markets (default: US IN EU TH ID MY MX IL)")
     ap.add_argument("--seed", action="store_true", help="seed baselines only, no update")
     ap.add_argument("--no-apply", action="store_true", help="detect + record only; don't edit CSVs")
     args = ap.parse_args()
