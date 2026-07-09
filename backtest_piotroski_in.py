@@ -34,7 +34,10 @@ import numpy as np
 import pandas as pd
 
 BASE = os.path.expanduser("~/Downloads/code/python_files")
-HIST = os.path.join(BASE, "cache_seed", "fundamentals_history", "IN.parquet")
+HIST = os.path.join(
+    os.environ.get("FUND_HIST_DIR") or os.path.join(BASE, "cache_seed", "fundamentals_history"),
+    "IN.parquet",
+)
 PRICES = os.path.join(BASE, "cache_seed", "ltm", "IN.parquet")
 
 
