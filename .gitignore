@@ -73,3 +73,6 @@ data/raw/
 data/reports/
 data/curated/*.parquet
 data/curated/etl_runs/
+
+# ETL checklist (derived)
+data/curated/*.md

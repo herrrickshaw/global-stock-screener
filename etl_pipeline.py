@@ -271,6 +271,36 @@ def extract_news(ctx):
     return "ok"
 
 
+@stage("extract_exchange_reference", "E")
+def extract_exchange_reference(ctx):
+    """Build the all-exchange data-freshness reference + daily checklist (runs
+    last in Extract, after any rescans) so stale market data is caught. Writes
+    data/curated/exchange_reference.parquet + daily_checklist_<date>.md and
+    flags any STALE exchanges in the run manifest."""
+    try:
+        import exchange_reference as xr
+
+        df = xr.build_reference(date.fromisoformat(RUN_DATE))
+        if df.empty:
+            ctx.notes["extract_exchange_reference"] = "no universe files under data/global_universe"
+            return "skip"
+        pq = xr.write_parquet(df)
+        md = os.path.join(CURATED, f"daily_checklist_{RUN_DATE}.md")
+        open(md, "w").write(xr.checklist_md(df, date.fromisoformat(RUN_DATE)))
+        ctx.artifacts["exchange_reference"] = pq
+        ctx.artifacts["checklist"] = md
+        ctx.rows["exchange_reference"] = len(df)
+        stale = df[df["status"] == "STALE"]["exchange"].tolist()
+        fresh = int((df["status"] == "FRESH").sum())
+        ctx.notes["extract_exchange_reference"] = f"{len(df)} exchanges, {fresh} fresh" + (
+            f" · ⚠ STALE: {', '.join(stale)}" if stale else " · none stale"
+        )
+    except Exception as e:
+        ctx.notes["extract_exchange_reference"] = f"failed: {str(e)[:100]}"
+        return "fail"
+    return "ok"
+
+
 # ─────────────────────────────── TRANSFORM ───────────────────────────────
 def _pe_zone(pe, sm):
     if pd.isna(pe) or pe <= 0 or pd.isna(sm) or sm <= 0:
