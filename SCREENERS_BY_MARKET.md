@@ -102,6 +102,35 @@ not evidence.
 
 ---
 
+## 5. Session verification (2026-07-09) — a real, point-in-time re-check
+
+I re-ran a **Darvas-breakout** backtest against the stored 10-year daily OHLCV
+(`cache_seed/ltm/<MKT>.parquet`): close crossing above its trailing 60-day box top,
+21-day forward return vs the market's all-days mean (edge in pp), ~400-ticker
+sample/market, point-in-time (no look-ahead). Result **matches `BACKTEST_FINDINGS.md`**:
+
+| Market | Breakout edge | Read |
+|---|---:|---|
+| India | **+1.6 pp** | breakout works (momentum-friendly) ✅ |
+| Europe | **+0.4 pp** | mildly positive |
+| Korea | +0.0 pp | neutral |
+| Japan | −0.2 pp | breakout hurts (mean-reversion) |
+| China | −0.7 pp | breakout hurts |
+| US | −6.5 pp | breakout hurts most |
+
+(Absolute return levels are survivorship-inflated — LTM holds only currently-listed
+names — so read the **sign and ordering**, not the magnitude.)
+
+**The fundamental screeners could NOT be backtested:** the repo stores only
+*current-snapshot* fundamentals (`cache_seed/fundamentals/{US,IN}.parquet`), not
+point-in-time quarterly financials, so a Piotroski/Coffee-Can/Magic-Formula backtest
+would require look-ahead — the exact flaw the "expansion screener" docs fell into.
+Closing that gap needs a historical quarterly-financials collection first (US via
+SEC EDGAR XBRL is the most tractable). Until then, the fundamental screeners remain
+implemented-and-thresholded but **empirically unvalidated by name.**
+
+---
+
 *Sources (via `git show <ref>:<file>`): `main` — README.md, FEATURES.md,
 HOW_IT_WORKS.md, AUTO_SCREENER.md, DATA_SOURCES.md, EXCHANGE_COVERAGE.md; root
 ~/CLAUDE.md (Darvas/Buffett + Piotroski thresholds, Pegu/Sarvas R pipeline); `karz`
