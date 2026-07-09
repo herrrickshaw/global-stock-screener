@@ -42,49 +42,80 @@ PRICES = os.path.join(BASE, "cache_seed", "ltm", "IN.parquet")
 
 
 def _piotroski(df):
-    """Compute F-score per (ticker, fy_end) from year vs prior year."""
+    """Compute F-score per (ticker, fy_end), year vs prior year. Schema-aware: if the
+    yfinance/SEC columns (total_assets + current_assets/liabilities + gross_profit) are
+    present, use the proper 9-point Piotroski (real current ratio + gross margin). Else
+    fall back to the screener.in derivation (approximated current ratio + net margin)."""
     df = df.sort_values(["ticker", "fy_end"]).copy()
-    for c in [
-        "net_income",
-        "revenue",
-        "cfo",
-        "borrowings",
-        "reserves",
-        "equity_capital",
-        "other_liab",
-        "inventory",
-        "receivables",
-        "cash",
-        "shares",
-    ]:
-        if c not in df:
-            df[c] = np.nan
-        df[c] = pd.to_numeric(df[c], errors="coerce")
-
-    df["equity"] = df["equity_capital"].fillna(0) + df["reserves"].fillna(0)
-    df["total_assets"] = df["equity"] + df["borrowings"].fillna(0) + df["other_liab"].fillna(0)
-    df["cur_assets"] = (
-        df["inventory"].fillna(0) + df["receivables"].fillna(0) + df["cash"].fillna(0)
+    direct = (
+        "total_assets" in df.columns
+        and pd.to_numeric(df.get("total_assets"), errors="coerce").notna().any()
     )
 
-    g = df.groupby("ticker")
+    if direct:  # yfinance / SEC schema — full 9-point
+        for c in [
+            "net_income",
+            "revenue",
+            "gross_profit",
+            "cfo",
+            "total_assets",
+            "current_assets",
+            "current_liabilities",
+            "long_term_debt",
+            "shares",
+        ]:
+            df[c] = pd.to_numeric(df.get(c), errors="coerce")
+        df["long_term_debt"] = df["long_term_debt"].fillna(0)  # debt-free names → 0
+        g = df.groupby("ticker")
 
-    def prev(col):
-        return g[col].shift(1)
+        def prev(c):
+            return g[c].shift(1)
 
-    ta, ta1 = df["total_assets"], prev("total_assets")
-    ni = df["net_income"]
-    roa = ni / ta
-    roa1 = prev("net_income") / ta1
-    cfo = df["cfo"]
-    lev, lev1 = df["borrowings"] / ta, prev("borrowings") / ta1
-    cr = df["cur_assets"] / df["other_liab"]
-    cr1 = prev("cur_assets") / prev("other_liab")
-    sh, sh1 = df["shares"], prev("shares")
-    nm = ni / df["revenue"]  # net margin (gross-margin proxy)
-    nm1 = prev("net_income") / prev("revenue")
-    at = df["revenue"] / ta
-    at1 = prev("revenue") / ta1
+        ta, ta1 = df["total_assets"], prev("total_assets")
+        ni, cfo = df["net_income"], df["cfo"]
+        roa, roa1 = ni / ta, prev("net_income") / ta1
+        lev, lev1 = df["long_term_debt"] / ta, prev("long_term_debt") / ta1
+        cr = df["current_assets"] / df["current_liabilities"]
+        cr1 = prev("current_assets") / prev("current_liabilities")
+        sh, sh1 = df["shares"], prev("shares")
+        gm = df["gross_profit"] / df["revenue"]
+        gm1 = prev("gross_profit") / prev("revenue")
+        at, at1 = df["revenue"] / ta, prev("revenue") / ta1
+    else:  # screener.in schema — derive totals from components
+        for c in [
+            "net_income",
+            "revenue",
+            "cfo",
+            "borrowings",
+            "reserves",
+            "equity_capital",
+            "other_liab",
+            "inventory",
+            "receivables",
+            "cash",
+            "shares",
+        ]:
+            df[c] = pd.to_numeric(df.get(c), errors="coerce")
+        df["equity"] = df["equity_capital"].fillna(0) + df["reserves"].fillna(0)
+        df["total_assets"] = df["equity"] + df["borrowings"].fillna(0) + df["other_liab"].fillna(0)
+        df["cur_assets"] = (
+            df["inventory"].fillna(0) + df["receivables"].fillna(0) + df["cash"].fillna(0)
+        )
+        g = df.groupby("ticker")
+
+        def prev(c):
+            return g[c].shift(1)
+
+        ta, ta1 = df["total_assets"], prev("total_assets")
+        ni, cfo = df["net_income"], df["cfo"]
+        roa, roa1 = ni / ta, prev("net_income") / ta1
+        lev, lev1 = df["borrowings"] / ta, prev("borrowings") / ta1
+        cr = df["cur_assets"] / df["other_liab"]
+        cr1 = prev("cur_assets") / prev("other_liab")
+        sh, sh1 = df["shares"], prev("shares")
+        gm = ni / df["revenue"]  # net-margin proxy
+        gm1 = prev("net_income") / prev("revenue")
+        at, at1 = df["revenue"] / ta, prev("revenue") / ta1
 
     f = (
         (roa > 0).astype(float)
@@ -94,10 +125,9 @@ def _piotroski(df):
         + (lev < lev1).astype(float)
         + (cr > cr1).astype(float)
         + (sh <= sh1 * 1.02).astype(float)  # tolerance so rounding ≠ dilution
-        + (nm > nm1).astype(float)
+        + (gm > gm1).astype(float)
         + (at > at1).astype(float)
     )
-    # only rows with a real, non-degenerate prior year get a valid score
     df["F"] = np.where(ta1.notna() & (ta1 != 0), f, np.nan)
     return df.dropna(subset=["F"])
 
