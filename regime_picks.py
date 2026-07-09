@@ -148,27 +148,57 @@ def picks_for(market, top=6):
     return out[:top]
 
 
+def _enrich_trendlyne(picks):
+    """Attach current Trendlyne Piotroski + DVM Durability to each pick (India only).
+    The backtests show quality is best used as an OVERLAY on breakouts, so a near_high
+    pick that is also high-Piotroski is the strongest signal. Best-effort: degrades
+    silently if Trendlyne is unreachable."""
+    try:
+        import trendlyne_auth as tl
+
+        s = tl.session()
+    except Exception:
+        return picks
+    for p in picks:
+        try:
+            sc = tl.scores(p["symbol"], s)
+            p["piotroski"] = sc.get("piotroski")
+            p["dvm_dur"] = sc.get("dvm_durability")
+        except Exception:
+            pass
+    return picks
+
+
 def _rows_html(market, picks):
     cur = CUR.get(market, "")
+    has_q = any(p.get("piotroski") is not None for p in picks)  # Trendlyne overlay present
     cells = ""
     for p in picks:
         r1 = f'{p["ret1m"]:+.1f}%' if p["ret1m"] == p["ret1m"] else "—"
+        td = 'style="padding:3px 8px;border-bottom:1px solid #eee;font-size:12px'
+        qcells = ""
+        if has_q:
+            f_ = p.get("piotroski")
+            dur = p.get("dvm_dur")
+            star = " ⭐" if (f_ is not None and f_ >= 7) else ""
+            fcol = "#2e7d32" if (f_ is not None and f_ >= 7) else "#333"
+            qcells = (
+                f'<td {td};text-align:right;color:{fcol};font-weight:600">'
+                f'{f_ if f_ is not None else "—"}{star}</td>'
+                f'<td {td};text-align:right">{dur if dur is not None else "—"}</td>'
+            )
         cells += (
-            f'<tr><td style="padding:3px 8px;border-bottom:1px solid #eee;font-size:12px">'
-            f'<b>{p["symbol"]}</b></td>'
-            f'<td style="padding:3px 8px;border-bottom:1px solid #eee;font-size:12px;text-align:right">'
-            f'{cur}{p["price"]:,.2f}</td>'
-            f'<td style="padding:3px 8px;border-bottom:1px solid #eee;font-size:12px;text-align:right">'
-            f"{r1}</td>"
-            f'<td style="padding:3px 8px;border-bottom:1px solid #eee;font-size:12px;text-align:right">'
-            f'${p["dvol_m"]:,.1f}M</td></tr>'
+            f'<tr><td {td}"><b>{p["symbol"]}</b></td>'
+            f'<td {td};text-align:right">{cur}{p["price"]:,.2f}</td>'
+            f'<td {td};text-align:right">{r1}</td>'
+            f'<td {td};text-align:right">${p["dvol_m"]:,.1f}M</td>{qcells}</tr>'
         )
+    th = 'style="text-align:right;padding:3px 8px;border-bottom:2px solid #1a73e8;font-size:11px"'
+    qhead = f"<th {th}>Piotroski</th><th {th}>Durability</th>" if has_q else ""
     return (
         '<table style="border-collapse:collapse;width:100%;margin:2px 0 12px">'
         '<tr><th style="text-align:left;padding:3px 8px;border-bottom:2px solid #1a73e8;font-size:11px">Symbol</th>'
-        '<th style="text-align:right;padding:3px 8px;border-bottom:2px solid #1a73e8;font-size:11px">Price</th>'
-        '<th style="text-align:right;padding:3px 8px;border-bottom:2px solid #1a73e8;font-size:11px">1-mo</th>'
-        '<th style="text-align:right;padding:3px 8px;border-bottom:2px solid #1a73e8;font-size:11px">Liquidity/day</th></tr>'
+        f"<th {th}>Price</th><th {th}>1-mo</th><th {th}>Liquidity/day</th>{qhead}</tr>"
         f"{cells}</table>"
     )
 
@@ -181,6 +211,8 @@ def section_html(markets=None, top=6):
         screen = PREFERRED.get(m, "—")
         regime, why = WHY.get(screen, ("", ""))
         picks = picks_for(m, top)
+        if m == "IN" and picks:  # Trendlyne covers India — add the quality overlay
+            picks = _enrich_trendlyne(picks)
         badge = "#c62828" if regime == "Mean-reversion" else "#2e7d32"
         blocks += (
             f'<h3 style="font-size:13px;margin:12px 0 2px">{FLAG.get(m,"")} {m} '
