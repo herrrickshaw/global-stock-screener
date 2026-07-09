@@ -107,15 +107,25 @@ def main():
     hist = pd.read_parquet(HIST)
     scored = _piotroski(hist)
     scored = _forward_returns(scored, args.horizon)
-    base = scored["fwd"].mean()
+    # A handful of penny-stock / survivorship lottery movers (fwd returns of
+    # hundreds of %) otherwise dominate whichever band they land in — winsorize the
+    # forward return to its 1st–99th pct so the band MEANS reflect the typical name,
+    # not the tail. The MEDIAN (reported alongside) is outlier-proof by construction.
+    lo_c, hi_c = scored["fwd"].quantile([0.01, 0.99]).to_numpy()
+    scored["fwd_w"] = scored["fwd"].clip(lo_c, hi_c)
+    base = scored["fwd_w"].mean()
+    base_med = scored["fwd"].median()
 
     print(f"Piotroski F-Score backtest — US — {args.horizon}-day forward, point-in-time")
     print(
         f"  scored rows: {len(scored):,} | tickers: {scored['ticker'].nunique()} "
         f"| years: {pd.to_datetime(scored['fy_end']).dt.year.min()}–{pd.to_datetime(scored['fy_end']).dt.year.max()}"
     )
-    print(f"  baseline mean forward return (all scored): {base*100:+.2f}%\n")
-    print(f"  {'F band':<10}{'n':>7}{'mean fwd%':>11}{'edge pp':>10}{'win%':>7}")
+    print(f"  baseline (winsorized mean {base*100:+.2f}% | median {base_med*100:+.2f}%)\n")
+    print(
+        f"  {'F band':<10}{'n':>7}{'wins.mean%':>11}{'edge pp':>9}"
+        f"{'median%':>10}{'edge pp':>9}{'win%':>7}"
+    )
     for lo, hi, label in [
         (8, 9, "strong 8–9"),
         (7, 9, "≥7"),
@@ -124,15 +134,21 @@ def main():
     ]:
         sub = scored[(scored["F"] >= lo) & (scored["F"] <= hi)]
         if len(sub):
-            m = sub["fwd"].mean()
+            m, md = sub["fwd_w"].mean(), sub["fwd"].median()
             print(
-                f"  {label:<10}{len(sub):>7,}{m*100:>10.2f}%{(m-base)*100:>+9.2f}{(sub['fwd']>0).mean()*100:>6.1f}%"
+                f"  {label:<10}{len(sub):>7,}{m*100:>10.2f}%{(m-base)*100:>+8.2f}"
+                f"{md*100:>9.2f}%{(md-base_med)*100:>+8.2f}{(sub['fwd']>0).mean()*100:>6.1f}%"
             )
-    # monotonicity check: mean fwd return by exact F score
-    print("\n  by exact F:")
-    tab = scored.groupby(scored["F"].astype(int))["fwd"].agg(["count", "mean"])
+    # monotonicity check: winsorized-mean AND median fwd return by exact F score
+    print("\n  by exact F (winsorized mean · median):")
+    tab = scored.groupby(scored["F"].astype(int)).agg(
+        n=("fwd", "size"), wmean=("fwd_w", "mean"), med=("fwd", "median")
+    )
     for f, row in tab.iterrows():
-        print(f"    F={f}: n={int(row['count']):>6,}  mean {row['mean']*100:+.2f}%")
+        print(
+            f"    F={f}: n={int(row['n']):>6,}  mean {row['wmean']*100:+.2f}%"
+            f"  median {row['med']*100:+.2f}%"
+        )
 
 
 if __name__ == "__main__":
