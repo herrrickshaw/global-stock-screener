@@ -40,8 +40,8 @@ _SUFFIX_EXCH = {
     ".SW": "SIX Swiss",
     ".VX": "SIX Swiss",
 }
-# The remaining PROVIDERS markets not present as global_universe CSVs.
-REMAINING = ["SE", "DK", "FI", "UK", "DE", "CH"]
+# Non-European markets to materialize (local exchange only).
+REMAINING = ["TH", "ID", "MY", "MX", "IL"]
 
 
 def _exch_from(ticker, default):
@@ -92,6 +92,11 @@ def build_market(market):
 
     tickers = us.get_universe(market)
     default_exch = {
+        "TH": "SET (Thailand)",
+        "ID": "IDX (Indonesia)",
+        "MY": "Bursa Malaysia",
+        "MX": "BMV (Mexico)",
+        "IL": "TASE (Israel)",
         "UK": "London Stock Exchange",
         "DE": "XETRA",
         "CH": "SIX Swiss",
