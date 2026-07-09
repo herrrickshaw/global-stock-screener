@@ -78,9 +78,10 @@ def _latest(patt):
 class Ctx:
     """Carries artifacts + lineage between stages within one run."""
 
-    def __init__(self, markets, force):
+    def __init__(self, markets, force, no_send=False):
         self.markets = markets
         self.force = force
+        self.no_send = no_send
         self.artifacts = {}  # logical name -> path
         self.rows = {}  # logical name -> row count
         self.lineage = {}  # output -> [inputs]
@@ -382,6 +383,39 @@ def load_report(ctx):
     return "ok" if r.returncode == 0 else "fail"
 
 
+@stage("load_deliver", "L")
+def load_deliver(ctx):
+    """Email the report token-free via send_mailer.send (Gmail SMTP). Skips when
+    --no-send is set or no GMAIL_USER/GMAIL_APP_PASSWORD is configured (report is
+    still saved to ~/Downloads either way)."""
+    report = ctx.artifacts.get("email")
+    if not report or not os.path.exists(report):
+        return "skip"
+    if ctx.no_send:
+        ctx.notes["load_deliver"] = "--no-send: report saved, not emailed"
+        return "skip"
+    pw = os.environ.get("GMAIL_APP_PASSWORD", "")
+    if not os.environ.get("GMAIL_USER") or len(pw) < 12 or "PUT-YOUR" in pw.upper():
+        ctx.notes["load_deliver"] = (
+            "no valid GMAIL_APP_PASSWORD (placeholder?) — report saved, not emailed"
+        )
+        return "skip"
+    subject = ctx.notes.get("load_report", "").replace("SUBJECT: ", "").strip() or (
+        f"Daily Market Report — {RUN_DATE}"
+    )
+    try:
+        import send_mailer
+
+        ok = send_mailer.send(subject, "See the HTML report.", open(report).read())
+        ctx.notes["load_deliver"] = (
+            "emailed" if ok else "send returned False"
+        ) + f": {subject[:60]}"
+        return "ok" if ok else "fail"
+    except Exception as e:
+        ctx.notes["load_deliver"] = f"send failed: {str(e)[:80]}"
+        return "fail"
+
+
 @stage("load_manifest", "L")
 def load_manifest(ctx):
     """Write the run manifest — status, timings, row counts, lineage."""
@@ -407,8 +441,8 @@ def load_manifest(ctx):
 
 
 # ─────────────────────────────── runner ───────────────────────────────
-def run(markets, phases, only_stage, force, dry):
-    ctx = Ctx(markets, force)
+def run(markets, phases, only_stage, force, dry, no_send=False):
+    ctx = Ctx(markets, force, no_send=no_send)
     print(
         f"ETL run {RUN_DATE} | markets={','.join(markets)} | phases={','.join(phases)}"
         f"{' | STAGE='+only_stage if only_stage else ''}{' | FORCE' if force else ''}{' | DRY-RUN' if dry else ''}"
@@ -460,6 +494,9 @@ def main():
     ap.add_argument("--phase", default="all", help="all or comma subset of E,T,L")
     ap.add_argument("--stage", default=None, help="run a single stage by name")
     ap.add_argument("--force", action="store_true", help="ignore idempotency / re-run")
+    ap.add_argument(
+        "--no-send", action="store_true", help="build/save the report but do not email it"
+    )
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     phases = (
@@ -468,7 +505,7 @@ def main():
         else [p.strip().upper() for p in args.phase.split(",")]
     )
     markets = [m.strip().upper() for m in args.markets.split(",")]
-    ctx = run(markets, phases, args.stage, args.force, args.dry_run)
+    ctx = run(markets, phases, args.stage, args.force, args.dry_run, no_send=args.no_send)
     man = ctx.artifacts.get("manifest")
     if man:
         print(f"\nmanifest → {os.path.relpath(man, BASE)}")
