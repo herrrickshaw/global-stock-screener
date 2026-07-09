@@ -26,6 +26,8 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <!-- Morning run is FAST: cap US/IN scans at the top 200 by size. -->
+    <key>GMS_TOP</key><string>200</string>
   </dict>
   <!-- Weekdays only: Weekday 1=Mon … 5=Fri, at 07:35 local. -->
   <key>StartCalendarInterval</key>

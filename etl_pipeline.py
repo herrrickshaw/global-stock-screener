@@ -119,11 +119,12 @@ def _latest(patt):
 class Ctx:
     """Carries artifacts + lineage between stages within one run."""
 
-    def __init__(self, markets, force, no_send=False, refresh_scans=False):
+    def __init__(self, markets, force, no_send=False, refresh_scans=False, hidden_gems=False):
         self.markets = markets
         self.force = force
         self.no_send = no_send
         self.refresh_scans = refresh_scans
+        self.hidden_gems = hidden_gems
         self.artifacts = {}  # logical name -> path
         self.rows = {}  # logical name -> row count
         self.lineage = {}  # output -> [inputs]
@@ -454,6 +455,36 @@ def transform_convergence(ctx):
     return "ok"
 
 
+@stage("transform_hidden_gems", "T")
+def transform_hidden_gems(ctx):
+    """Full-universe only (--hidden-gems): the strongest picks the fast top-200
+    morning scan can't reach — Piotroski>=8 across every market. Writes a ranked
+    curated/hidden_gems_<date>.parquet (US also sorted smallest-first by
+    Net_Profit_$M, so lesser-known names surface). Skipped on capped runs."""
+    if not ctx.hidden_gems:
+        return "skip"
+    fund = ctx.artifacts.get("fundamentals")
+    if not fund:
+        return "skip"
+    f = pd.read_parquet(fund)
+    p = pd.to_numeric(f.get("Piotroski_Score"), errors="coerce")
+    gems = f[p >= 8].copy()
+    gems["Piotroski_Score"] = pd.to_numeric(gems["Piotroski_Score"], errors="coerce")
+    if "Net_Profit_$M" in gems.columns:
+        gems["_size"] = pd.to_numeric(gems["Net_Profit_$M"], errors="coerce")
+        gems = gems.sort_values(["Piotroski_Score", "_size"], ascending=[False, True]).drop(
+            columns="_size"
+        )
+    else:
+        gems = gems.sort_values("Piotroski_Score", ascending=False)
+    out = os.path.join(CURATED, f"hidden_gems_{RUN_DATE}.parquet")
+    gems.to_parquet(out, index=False)
+    ctx.artifacts["hidden_gems"] = out
+    ctx.rows["hidden_gems"] = len(gems)
+    ctx.lineage[out] = [fund]
+    return "ok"
+
+
 # ─────────────────────────────── LOAD ───────────────────────────────
 @stage("load_report", "L")
 def load_report(ctx):
@@ -496,6 +527,9 @@ def load_deliver(ctx):
     subject = ctx.notes.get("load_report", "").replace("SUBJECT: ", "").strip() or (
         f"Daily Market Report — {RUN_DATE}"
     )
+    if ctx.hidden_gems:
+        n = ctx.rows.get("hidden_gems", 0)
+        subject = f"💎 Hidden Gems (full-market) — {n} strong picks · {subject}"
     try:
         import send_mailer
 
@@ -534,8 +568,10 @@ def load_manifest(ctx):
 
 
 # ─────────────────────────────── runner ───────────────────────────────
-def run(markets, phases, only_stage, force, dry, no_send=False, refresh_scans=False):
-    ctx = Ctx(markets, force, no_send=no_send, refresh_scans=refresh_scans)
+def run(
+    markets, phases, only_stage, force, dry, no_send=False, refresh_scans=False, hidden_gems=False
+):
+    ctx = Ctx(markets, force, no_send=no_send, refresh_scans=refresh_scans, hidden_gems=hidden_gems)
     print(
         f"ETL run {RUN_DATE} | markets={','.join(markets)} | phases={','.join(phases)}"
         f"{' | STAGE='+only_stage if only_stage else ''}{' | FORCE' if force else ''}{' | DRY-RUN' if dry else ''}"
@@ -595,6 +631,11 @@ def main():
         action="store_true",
         help="rebuild a market's scan workbook when it's stale/missing",
     )
+    ap.add_argument(
+        "--hidden-gems",
+        action="store_true",
+        help="full-universe run: surface Piotroski>=8 picks beyond the top-200 (curated + subject)",
+    )
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     phases = (
@@ -611,6 +652,7 @@ def main():
         args.dry_run,
         no_send=args.no_send,
         refresh_scans=args.refresh_scans,
+        hidden_gems=args.hidden_gems,
     )
     man = ctx.artifacts.get("manifest")
     if man:
