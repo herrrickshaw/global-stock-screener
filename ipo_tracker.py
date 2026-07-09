@@ -29,10 +29,21 @@ BASE = os.path.expanduser("~/Downloads/code/python_files")
 UNI_DIR = os.path.join(BASE, "data", "global_universe")
 CURATED = os.path.join(BASE, "data", "curated")
 LEDGER = os.path.join(CURATED, "ipo_additions.parquet")
-DEFAULT_MARKETS = ["US", "IN", "EU"]
+DEFAULT_MARKETS = ["US", "IN", "EU", "TH", "ID", "MY", "MX", "IL"]
 
 # market → suffix to normalize a bare official symbol into yfinance form.
 _SUFFIX = {"IN": ".NS"}
+# market → default exchange label (matches build_universe / the reference).
+_EXCH_LABEL = {
+    "US": "US",
+    "IN": "NSE",
+    "EU": "Europe",
+    "TH": "SET (Thailand)",
+    "ID": "IDX (Indonesia)",
+    "MY": "Bursa Malaysia",
+    "MX": "BMV (Mexico)",
+    "IL": "TASE (Israel)",
+}
 
 
 def _norm(ticker, market):
@@ -42,12 +53,13 @@ def _norm(ticker, market):
 
 
 def _exch(ticker, market):
+    default = _EXCH_LABEL.get(market, market)
     try:
         import build_universe as bu
 
-        return bu._exch_from(ticker, {"US": "US", "IN": "NSE", "EU": "Europe"}.get(market, market))
+        return bu._exch_from(ticker, default)
     except Exception:
-        return {"US": "US", "IN": "NSE", "EU": "Europe"}.get(market, market)
+        return default
 
 
 def _append_universe(market, pairs):
