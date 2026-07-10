@@ -50,12 +50,23 @@ def _reward_picks():
         return "", ""
 
 
+def _overlay_picks():
+    """Liquidity-confirmed picks (price screen × volume trend)."""
+    try:
+        import reward_overlay_mailer as ov
+
+        return ov.section_text(), ov.section_html()
+    except Exception:
+        return "", ""
+
+
 def build():
     today = date.today().isoformat()
     from program_summary_mailer import build as build_summary
 
     dtext, dhtml = _daily()
     rtext, rhtml = _reward_picks()
+    otext, ohtml = _overlay_picks()
     _, stext, shtml = build_summary()
 
     divider = (
@@ -67,11 +78,12 @@ def build():
         f"its screener: the full point-in-time backtest program, below.</p></div></div>"
     )
 
-    html = (dhtml or "") + (rhtml or "") + divider + shtml
+    html = (dhtml or "") + (rhtml or "") + (ohtml or "") + divider + shtml
     text = (
         f"Daily Market Brief + Cross-Market Research — {today}\n\n"
         + (dtext or "")
         + (("\n\n" + rtext) if rtext else "")
+        + (("\n\n" + otext) if otext else "")
         + "\n\n=========================  CROSS-MARKET RESEARCH  =========================\n\n"
         + stext
     )
