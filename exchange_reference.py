@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 """
-exchange_reference.py — daily data-freshness checklist across ALL exchanges.
-============================================================================
-Builds a single reference so stale market data is caught at a glance:
+exchange_reference.py — daily data-freshness checklist + SSOT across ALL exchanges.
+===================================================================================
+Single source of truth so stale market data is caught at a glance:
 
   data/curated/exchange_reference.parquet   one row per (market, exchange) with
       the ticker list, the universe-list update date, the scan-DATA update date,
-      age in days, and a FRESH / STALE / UNIVERSE_ONLY / NO_DATA status.
+      the dated FUNDAMENTALS-collection status (ticker count, fiscal-year range,
+      collection date), age in days, and a FRESH / STALE / UNIVERSE_ONLY status.
 
   data/curated/daily_checklist_<date>.md    a human-readable ✅/⚠️ checklist.
 
-Freshness has two layers:
+Freshness layers:
   • universe_updated — when the ticker LIST for that exchange was last refreshed
-    (mtime of the data/global_universe/<MKT>.csv it came from).
-  • data_updated     — when the SCAN data (OHLC+fundamentals) for that market was
-    last rebuilt (mtime of the latest scan workbook). Only US/EU/IN are scanned;
-    other markets are UNIVERSE_ONLY (we track their tickers but don't scan yet).
-
-Status rule: on a weekday, data older than STALE_AFTER_DAYS is STALE.
+    (mtime of data/global_universe/<MKT>.csv).
+  • data_updated     — when the SCAN data (OHLC scan workbook) for that market was
+    last rebuilt. Only US/EU/IN are scanned; others are UNIVERSE_ONLY.
+  • fundamentals     — dated point-in-time financials collected per market
+    (cache_seed/fundamentals_history/<MKT>.parquet, FUND_HIST_DIR-overridable):
+    US via SEC EDGAR, IN via yfinance (5y) / screener.in (10y). Records the ticker
+    count, fiscal-year span, row count and the collection date.
 
 CLI:
   python3 exchange_reference.py            # build parquet + print checklist
@@ -34,6 +36,9 @@ import pandas as pd
 BASE = os.path.expanduser("~/Downloads/code/python_files")
 CURATED = os.path.join(BASE, "data", "curated")
 UNIVERSE_GLOB = os.path.join(BASE, "data", "global_universe", "*.csv")
+FUND_DIR = os.environ.get("FUND_HIST_DIR") or os.path.join(
+    BASE, "cache_seed", "fundamentals_history"
+)
 
 # market → scan workbook glob (data freshness). Markets absent here are UNIVERSE_ONLY.
 SCAN_GLOBS = {
@@ -41,7 +46,8 @@ SCAN_GLOBS = {
     "EU": "european_scan/european_market_scan_broad_*.xlsx",
     "IN": "indian_full_scan/indian_full_scan_*.xlsx",
 }
-# Tidy the terse US exchange codes the universe file carries.
+# per-market source of the dated fundamentals collection (for the checklist).
+FUND_SOURCE = {"US": "SEC EDGAR", "IN": "yfinance/screener.in"}
 US_EXCH_FIX = {"N": "NYSE", "A": "NYSE American", "P": "NYSE Arca", "Z": "Cboe BZX", "K": "Nasdaq"}
 STALE_AFTER_DAYS = 1  # weekday scan data older than this = STALE
 
@@ -59,8 +65,30 @@ def _latest(patt):
     return f[-1] if f else None
 
 
+def _fundamentals_status(market):
+    """Dated-fundamentals collection status for a market (empty if none collected)."""
+    p = os.path.join(FUND_DIR, f"{market}.parquet")
+    if not os.path.exists(p):
+        return {}
+    try:
+        d = pd.read_parquet(p, columns=["ticker", "fy_end"])
+    except Exception:
+        return {}
+    if d.empty:
+        return {}
+    yrs = pd.to_datetime(d["fy_end"], errors="coerce").dt.year.dropna()
+    return {
+        "fund_source": FUND_SOURCE.get(market, "—"),
+        "n_fund_tickers": int(d["ticker"].nunique()),
+        "fund_rows": int(len(d)),
+        "fund_year_min": int(yrs.min()) if not yrs.empty else None,
+        "fund_year_max": int(yrs.max()) if not yrs.empty else None,
+        "fund_collected_on": _mtime_date(p).isoformat(),
+    }
+
+
 def build_reference(today=None):
-    """Return the per-(market,exchange) freshness DataFrame."""
+    """Return the per-(market,exchange) freshness/SSOT DataFrame."""
     today = today or datetime.date.today()
     scan = {m: (_latest(g), _mtime_date(_latest(g))) for m, g in SCAN_GLOBS.items()}
     rows = []
@@ -73,6 +101,7 @@ def build_reference(today=None):
             df["exchange"] = market
         df["exchange"] = df["exchange"].astype(str).replace(US_EXCH_FIX)
         scan_wb, scan_date = scan.get(market, (None, None))
+        fund = _fundamentals_status(market)
         for exch, g in df.groupby("exchange"):
             tickers = sorted(g[tcol].dropna().astype(str).unique())
             if scan_date:
@@ -95,6 +124,12 @@ def build_reference(today=None):
                     "data_updated": data_updated,
                     "age_days": age,
                     "status": status,
+                    "fund_source": fund.get("fund_source"),
+                    "n_fund_tickers": fund.get("n_fund_tickers"),
+                    "fund_rows": fund.get("fund_rows"),
+                    "fund_year_min": fund.get("fund_year_min"),
+                    "fund_year_max": fund.get("fund_year_max"),
+                    "fund_collected_on": fund.get("fund_collected_on"),
                     "checked": today.isoformat(),
                 }
             )
@@ -128,19 +163,35 @@ def checklist_md(df, today):
         f"**{n_ex} exchanges** · ✅ {fresh} fresh · ⚠️ {stale} stale · 📋 {uni} universe-only "
         f"· {int(df['n_tickers'].sum()):,} tickers tracked"
     )
+    # dated-fundamentals coverage summary (the SSOT's point-in-time layer)
+    fdf = df[df["n_fund_tickers"].notna()].drop_duplicates("market")
+    if not fdf.empty:
+        parts = [
+            f"{r['market']} {int(r['n_fund_tickers']):,} names "
+            f"({int(r['fund_year_min'])}–{int(r['fund_year_max'])}, {r['fund_source']}, "
+            f"collected {r['fund_collected_on']})"
+            for _, r in fdf.iterrows()
+        ]
+        lines.append("\n**Dated fundamentals:** " + " · ".join(parts))
     if stale:
         names = ", ".join(df[df["status"] == "STALE"]["exchange"].tolist())
         lines.append(f"\n> ⚠️ **STALE — refresh needed:** {names}")
     lines.append(
-        "\n| Status | Market | Exchange | Tickers | Data updated | Age (d) | List updated |"
+        "\n| Status | Market | Exchange | Tickers | Data updated | Fund. names | Fund. yrs | Age (d) |"
     )
-    lines.append("|---|---|---|---:|---|---:|---|")
+    lines.append("|---|---|---|---:|---|---:|---|---:|")
     for _, r in df.iterrows():
         badge = _BADGE.get(r["status"], "")
         age = "" if pd.isna(r["age_days"]) else int(r["age_days"])
+        fn = "" if pd.isna(r["n_fund_tickers"]) else f"{int(r['n_fund_tickers']):,}"
+        fy = (
+            f"{int(r['fund_year_min'])}–{int(r['fund_year_max'])}"
+            if pd.notna(r["fund_year_min"])
+            else "—"
+        )
         lines.append(
             f"| {badge} {r['status']} | {r['market']} | {r['exchange']} | {r['n_tickers']:,} | "
-            f"{r['data_updated'] or '—'} | {age} | {r['universe_updated'] or '—'} |"
+            f"{r['data_updated'] or '—'} | {fn or '—'} | {fy} | {age} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -156,14 +207,13 @@ def run(today=None, write=True):
     if write:
         md_path = os.path.join(CURATED, f"daily_checklist_{today.isoformat()}.md")
         open(md_path, "w").write(md)
-    # concise console checklist
-    print(md.split("\n| Status")[0])  # header + summary + stale line
+    print(md.split("\n| Status")[0])  # header + summary + fundamentals + stale line
     print(f"\nparquet → {os.path.relpath(pq, BASE) if pq else '(not written)'}")
     return df, pq
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Daily exchange data-freshness reference + checklist")
+    ap = argparse.ArgumentParser(description="Daily exchange data-freshness reference + SSOT")
     ap.add_argument("--stale", action="store_true", help="exit 1 if any scanned exchange is STALE")
     ap.add_argument("--no-write", action="store_true", help="print only; don't write files")
     args = ap.parse_args()
