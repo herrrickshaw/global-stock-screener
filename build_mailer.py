@@ -29,8 +29,8 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 
 import liquidity as liq
-import run_global_analysis as rga
 import market_performance as mp
+import run_global_analysis as rga
 
 GMS_REPO = os.path.expanduser("~/repos/global-market-scanners")
 
@@ -45,8 +45,10 @@ def _tv(x):
 
 def _table(headers, rows):
     h = "".join(f"<th align='left' style='padding:5px 8px'>{x}</th>" for x in headers)
-    return (f"<table style='border-collapse:collapse;width:100%;font-size:13px'>"
-            f"<tr style='background:#eef'>{h}</tr>{''.join(rows)}</table>")
+    return (
+        f"<table style='border-collapse:collapse;width:100%;font-size:13px'>"
+        f"<tr style='background:#eef'>{h}</tr>{''.join(rows)}</table>"
+    )
 
 
 def _combined_report(market: str):
@@ -60,15 +62,20 @@ def _combined_report(market: str):
 def _picks_rows(d: dict, market: str, limit: int = 12):
     if not d or not d.get("picks"):
         return []
-    p = pd.DataFrame(d["picks"]); p["Market"] = market; p = liq.annotate(p)
+    p = pd.DataFrame(d["picks"])
+    p["Market"] = market
+    p = liq.annotate(p)
     rank = {"Triple Hit": 0, "Multi-Screen": 1, "Single-Screen": 2}
     lr = {"High": 0, "Medium": 1, "Low": 2, "Unknown": 3}
-    p["_o"] = p["Tier"].map(rank).fillna(3); p["_l"] = p["Liquidity"].map(lr)
+    p["_o"] = p["Tier"].map(rank).fillna(3)
+    p["_l"] = p["Liquidity"].map(lr)
     rows = []
     for _, r in p.sort_values(["_o", "_l"]).head(limit).iterrows():
-        rows.append(f"<tr><td style='padding:4px 8px'><b>{r.Symbol}</b></td>"
-                    f"<td>{r.Tier}</td><td>{r.Screens}</td><td>{_tv(r.get('Turnover_USD'))}</td>"
-                    f"<td style='color:{_COL.get(r.Liquidity,'#777')};font-weight:600'>{r.Liquidity}</td></tr>")
+        rows.append(
+            f"<tr><td style='padding:4px 8px'><b>{r.Symbol}</b></td>"
+            f"<td>{r.Tier}</td><td>{r.Screens}</td><td>{_tv(r.get('Turnover_USD'))}</td>"
+            f"<td style='color:{_COL.get(r.Liquidity,'#777')};font-weight:600'>{r.Liquidity}</td></tr>"
+        )
     return rows
 
 
@@ -78,10 +85,12 @@ def _convergence_rows(d: dict):
     rows = []
     for r in d["convergence"]:
         col = "#1b7f37" if "BULLISH" in r.get("Convergence", "") else "#b8860b"
-        rows.append(f"<tr><td style='padding:4px 8px'><b>{r['Symbol']}</b></td>"
-                    f"<td style='color:{col};font-weight:600'>{r['Convergence']}</td>"
-                    f"<td>{r['Fundamental']}</td><td>{r['News']} ({r['News_Score']:+.2f})</td>"
-                    f"<td style='font-size:11px'>{r.get('Top_Headline','')[:60]}</td></tr>")
+        rows.append(
+            f"<tr><td style='padding:4px 8px'><b>{r['Symbol']}</b></td>"
+            f"<td style='color:{col};font-weight:600'>{r['Convergence']}</td>"
+            f"<td>{r['Fundamental']}</td><td>{r['News']} ({r['News_Score']:+.2f})</td>"
+            f"<td style='font-size:11px'>{r.get('Top_Headline','')[:60]}</td></tr>"
+        )
     return rows
 
 
@@ -93,9 +102,11 @@ def _ai_html(label: str, ai: dict | None) -> str:
     warn = ""
     if ai["n"] <= 2:
         warn = " ⚠️ thin sample — treat as noise, not a signal."
-    return (f"<p style='font-size:12px;margin:4px 0'><b>{label}</b> — {ai['tape']} tape, "
-            f"reward {ai['reward']:.2f}{rl}, {ai['n']} names, {ai['overlap']*100:.0f}% overlap "
-            f"w/ known-good.{warn}<br>{picks}</p>")
+    return (
+        f"<p style='font-size:12px;margin:4px 0'><b>{label}</b> — {ai['tape']} tape, "
+        f"reward {ai['reward']:.2f}{rl}, {ai['n']} names, {ai['overlap']*100:.0f}% overlap "
+        f"w/ known-good.{warn}<br>{picks}</p>"
+    )
 
 
 def _ai_screener_section(market: str):
@@ -129,19 +140,30 @@ def _gms_scan(market: str):
     try:
         xl = pd.ExcelFile(path)
         triple = xl.parse("Triple_Hits") if "Triple_Hits" in xl.sheet_names else pd.DataFrame()
-        multi = xl.parse("Multi_Screen_Hits") if "Multi_Screen_Hits" in xl.sheet_names else pd.DataFrame()
+        multi = (
+            xl.parse("Multi_Screen_Hits")
+            if "Multi_Screen_Hits" in xl.sheet_names
+            else pd.DataFrame()
+        )
         ml_bull = xl.parse("ML_Bullish") if "ML_Bullish" in xl.sheet_names else pd.DataFrame()
         if "Note" in triple.columns:  # placeholder sheet when there are 0 triple hits
             triple = pd.DataFrame()
-        return {"triple": triple, "multi": multi, "ml_bull": ml_bull, "file": os.path.basename(path)}
+        return {
+            "triple": triple,
+            "multi": multi,
+            "ml_bull": ml_bull,
+            "file": os.path.basename(path),
+        }
     except Exception:
         return None
 
 
 def _gms_html(label: str, scan: dict | None) -> str:
     if not scan:
-        return (f"<p style='font-size:12px;color:#666'>{label}: no global-market-scanners run cached "
-                f"(clone/run github.com/herrrickshaw/global-market-scanners).</p>")
+        return (
+            f"<p style='font-size:12px;color:#666'>{label}: no global-market-scanners run cached "
+            f"(clone/run github.com/herrrickshaw/global-market-scanners).</p>"
+        )
     parts = [f"<p style='font-size:12px;margin:6px 0 2px'><b>{label}</b> — {scan['file']}</p>"]
     if not scan["triple"].empty:
         names = ", ".join(f"<b>{s}</b>" for s in scan["triple"]["Symbol"].head(10))
@@ -150,14 +172,22 @@ def _gms_html(label: str, scan: dict | None) -> str:
         parts.append("<p style='font-size:12px;margin:2px 0;color:#666'>No Triple Hits today.</p>")
     if not scan["multi"].empty:
         names = ", ".join(f"<b>{s}</b>" for s in scan["multi"]["Symbol"].head(10))
-        parts.append(f"<p style='font-size:12px;margin:2px 0'>Multi-Screen Hits (top 10 of {len(scan['multi'])}): {names}</p>")
+        parts.append(
+            f"<p style='font-size:12px;margin:2px 0'>Multi-Screen Hits (top 10 of {len(scan['multi'])}): {names}</p>"
+        )
     if not scan["ml_bull"].empty:
         top = scan["ml_bull"].sort_values("ML_Confidence", ascending=False).head(5)
         names = []
         for _, r in top.iterrows():
             pred = r.get("ML_Pred_Ret%")
-            names.append(f"<b>{r['Symbol']}</b> ({pred:+.1f}%)" if pd.notna(pred) else f"<b>{r['Symbol']}</b>")
-        parts.append(f"<p style='font-size:12px;margin:2px 0'>ML Ridge signal, top bullish: {', '.join(names)}</p>")
+            names.append(
+                f"<b>{r['Symbol']}</b> ({pred:+.1f}%)"
+                if pd.notna(pred)
+                else f"<b>{r['Symbol']}</b>"
+            )
+        parts.append(
+            f"<p style='font-size:12px;margin:2px 0'>ML Ridge signal, top bullish: {', '.join(names)}</p>"
+        )
     return "".join(parts)
 
 
@@ -173,9 +203,16 @@ def _europe_scan():
     try:
         xl = pd.ExcelFile(path)
         triple = xl.parse("Triple_Hits") if "Triple_Hits" in xl.sheet_names else pd.DataFrame()
-        darvas = xl.parse("Darvas_Signals") if "Darvas_Signals" in xl.sheet_names else pd.DataFrame()
+        darvas = (
+            xl.parse("Darvas_Signals") if "Darvas_Signals" in xl.sheet_names else pd.DataFrame()
+        )
         all_stocks = xl.parse("All_Stocks") if "All_Stocks" in xl.sheet_names else pd.DataFrame()
-        return {"triple": triple, "darvas": darvas, "n_scanned": len(all_stocks), "file": os.path.basename(path)}
+        return {
+            "triple": triple,
+            "darvas": darvas,
+            "n_scanned": len(all_stocks),
+            "file": os.path.basename(path),
+        }
     except Exception:
         return None
 
@@ -183,20 +220,26 @@ def _europe_scan():
 def _europe_html(scan: dict | None) -> str:
     if not scan:
         return "<p style='font-size:12px;color:#666'>No Europe scan cached (run full_european_market_scan.py).</p>"
-    parts = [f"<p style='font-size:12px;margin:2px 0 6px'>{scan['n_scanned']} stocks scanned across 22 exchanges — {scan['file']}</p>"]
+    parts = [
+        f"<p style='font-size:12px;margin:2px 0 6px'>{scan['n_scanned']} stocks scanned across 22 exchanges — {scan['file']}</p>"
+    ]
     if not scan["triple"].empty:
         rows = []
         for _, r in scan["triple"].iterrows():
-            rows.append(f"<tr><td style='padding:4px 8px'><b>{r['Symbol']}</b></td><td>{r['Name']}</td>"
-                        f"<td>{r['Sector']}</td><td>{r.get('Piotroski_Score','')}/9</td>"
-                        f"<td>{r.get('CoffeeCan_Score','')}</td><td>€{r['LTP']:.2f}</td></tr>")
+            rows.append(
+                f"<tr><td style='padding:4px 8px'><b>{r['Symbol']}</b></td><td>{r['Name']}</td>"
+                f"<td>{r['Sector']}</td><td>{r.get('Piotroski_Score','')}/9</td>"
+                f"<td>{r.get('CoffeeCan_Score','')}</td><td>€{r['LTP']:.2f}</td></tr>"
+            )
         parts.append(_table(["Symbol", "Name", "Sector", "F-Score", "CoffeeCan", "LTP"], rows))
     else:
         parts.append("<p style='font-size:12px;color:#666'>No Triple Hits today.</p>")
     if not scan["darvas"].empty:
         top = scan["darvas"].sort_values("Upside_to_Top%", ascending=False).head(8)
         names = ", ".join(f"<b>{r.Symbol}</b>" for _, r in top.iterrows())
-        parts.append(f"<p style='font-size:12px;margin:6px 0 0'>{len(scan['darvas'])} Darvas breakouts. Top by upside-to-box-top: {names}</p>")
+        parts.append(
+            f"<p style='font-size:12px;margin:6px 0 0'>{len(scan['darvas'])} Darvas breakouts. Top by upside-to-box-top: {names}</p>"
+        )
     return "".join(parts)
 
 
@@ -438,43 +481,68 @@ def build():
             cdf = liq.annotate(cdf)
         cdf = cdf[cdf["Liquidity"].isin(["High", "Medium"])].sort_values("Cash_Cycle").head(10)
         for _, r in cdf.iterrows():
-            ccc_rows.append(f"<tr><td style='padding:4px 8px'><b>{r.Symbol}</b></td>"
-                            f"<td>{r.get('Name','')}</td><td>{r.Cash_Cycle:.1f}</td>"
-                            f"<td>{r.get('ROCE','')}</td>"
-                            f"<td style='color:{_COL.get(r.Liquidity,'#777')};font-weight:600'>{r.Liquidity}</td></tr>")
+            ccc_rows.append(
+                f"<tr><td style='padding:4px 8px'><b>{r.Symbol}</b></td>"
+                f"<td>{r.get('Name','')}</td><td>{r.Cash_Cycle:.1f}</td>"
+                f"<td>{r.get('ROCE','')}</td>"
+                f"<td style='color:{_COL.get(r.Liquidity,'#777')};font-weight:600'>{r.Liquidity}</td></tr>"
+            )
     except Exception:
         pass
 
     # 3. Global momentum (top 15 overall)
     allh = rga.load_highlights()
     g = allh.head(15)
-    g_rows = [f"<tr><td style='padding:4px 8px'>{r.Market}</td><td>{r.Symbol}</td>"
-              f"<td>{r.ret_126:+.0f}</td><td>{r.rsi14}</td></tr>" for _, r in g.iterrows()]
+    g_rows = [
+        f"<tr><td style='padding:4px 8px'>{r.Market}</td><td>{r.Symbol}</td>"
+        f"<td>{r.ret_126:+.0f}</td><td>{r.rsi14}</td></tr>"
+        for _, r in g.iterrows()
+    ]
 
     # 3b. Other markets — top tradable mover per market (world tour, ex-IN/US)
     other_rows = []
     try:
         h = liq.annotate(allh.copy())
-        names = {"TW": "Taiwan", "KR": "Korea", "JP": "Japan", "CN": "China", "HK": "Hong Kong",
-                 "CA": "Canada", "AU": "Australia", "UK": "UK", "DE": "Germany", "CH": "Switzerland",
-                 "SE": "Sweden", "FI": "Finland", "DK": "Denmark", "SG": "Singapore", "EU": "Euronext",
-                 "BR": "Brazil", "SA": "Saudi", "ZA": "S.Africa"}
+        names = {
+            "TW": "Taiwan",
+            "KR": "Korea",
+            "JP": "Japan",
+            "CN": "China",
+            "HK": "Hong Kong",
+            "CA": "Canada",
+            "AU": "Australia",
+            "UK": "UK",
+            "DE": "Germany",
+            "CH": "Switzerland",
+            "SE": "Sweden",
+            "FI": "Finland",
+            "DK": "Denmark",
+            "SG": "Singapore",
+            "EU": "Euronext",
+            "BR": "Brazil",
+            "SA": "Saudi",
+            "ZA": "S.Africa",
+        }
         for m in [x for x in names if x in set(h.Market)]:
             sub = h[h.Market == m].sort_values("ret_126", ascending=False).head(1)
             if sub.empty:
                 continue
             r = sub.iloc[0]
-            other_rows.append(f"<tr><td style='padding:4px 8px'>{names[m]}</td>"
-                              f"<td><b>{r.Symbol}</b></td><td>{r.ret_126:+.0f}%</td>"
-                              f"<td style='color:{_COL.get(r.Liquidity,'#777')};font-weight:600'>{r.Liquidity}</td></tr>")
+            other_rows.append(
+                f"<tr><td style='padding:4px 8px'>{names[m]}</td>"
+                f"<td><b>{r.Symbol}</b></td><td>{r.ret_126:+.0f}%</td>"
+                f"<td style='color:{_COL.get(r.Liquidity,'#777')};font-weight:600'>{r.Liquidity}</td></tr>"
+            )
     except Exception:
         pass
 
     # 4. 5y scoreboard
     p5 = mp.load()
-    p_rows = [f"<tr><td style='padding:4px 8px'>{r.Market}</td><td>{r.Index}</td>"
-              f"<td>{r['CAGR%']}</td><td>{r['Return_1y%']}</td><td>{r.Sharpe}</td></tr>"
-              for _, r in p5.iterrows()]
+    p_rows = [
+        f"<tr><td style='padding:4px 8px'>{r.Market}</td><td>{r.Index}</td>"
+        f"<td>{r['CAGR%']}</td><td>{r['Return_1y%']}</td><td>{r.Sharpe}</td></tr>"
+        for _, r in p5.iterrows()
+    ]
 
     html = f"""<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:740px;color:#1a1a1a">
 <h1 style="font-size:21px;margin:0 0 2px">📈 Daily Market Brief — {today}</h1>

@@ -16,22 +16,21 @@ Usage:
     report.save_report("data_validation_report.json")
 """
 
-import json
-import os
 import hashlib
+import json
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any
-import warnings
+from typing import Any, Dict, List, Optional, Tuple
 
-import pandas as pd
 import numpy as np
-from dataclasses import dataclass, asdict, field
+import pandas as pd
 
 
 @dataclass
 class DataSourceMetadata:
     """Metadata for a single data source."""
+
     source_name: str
     source_type: str  # "parquet", "csv", "api", "kaggle"
     path: str
@@ -50,6 +49,7 @@ class DataSourceMetadata:
 @dataclass
 class CrossSourceIssue:
     """Issue found when comparing across sources."""
+
     symbol: str
     date: str
     source_1: str
@@ -63,6 +63,7 @@ class CrossSourceIssue:
 @dataclass
 class DataLeakageIssue:
     """Data leakage issue in backtest/analysis."""
+
     file_path: str
     line_number: int
     issue_type: str  # "future_data", "test_in_train", "unfair_split"
@@ -74,6 +75,7 @@ class DataLeakageIssue:
 @dataclass
 class ValidationReport:
     """Complete validation report."""
+
     generated_at: str
     total_sources: int
     total_records: int
@@ -95,15 +97,15 @@ class ValidationReport:
 
     def save_report(self, path: str):
         """Save report to JSON."""
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             json.dump(self.to_dict(), f, indent=2, default=str)
         print(f"Report saved to {path}")
 
     def print_summary(self):
         """Print human-readable summary."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("DATA VALIDATION REPORT SUMMARY")
-        print("="*60)
+        print("=" * 60)
         print(f"Generated: {self.generated_at}")
         print(f"\nTotal Data Sources: {self.total_sources}")
         print(f"Total Records: {self.total_records:,}")
@@ -203,7 +205,7 @@ class DataValidator:
             path=str(path),
             created_at=datetime.fromtimestamp(stat.st_ctime).isoformat(),
             last_modified=datetime.fromtimestamp(stat.st_mtime).isoformat(),
-            file_size_mb=stat.st_size / (1024*1024),
+            file_size_mb=stat.st_size / (1024 * 1024),
             record_count=len(df),
             symbols_count=len(symbols),
             date_range=date_range,
@@ -227,14 +229,14 @@ class DataValidator:
                         path=str(cf),
                         created_at=datetime.fromtimestamp(cf.stat().st_ctime).isoformat(),
                         last_modified=datetime.fromtimestamp(cf.stat().st_mtime).isoformat(),
-                        file_size_mb=cf.stat().st_size / (1024*1024),
+                        file_size_mb=cf.stat().st_size / (1024 * 1024),
                         record_count=len(df),
                         symbols_count=len(self._extract_symbols(df)),
                         date_range=self._extract_date_range(df),
                         columns=df.columns.tolist(),
                     )
                     sources.append(metadata)
-                except Exception as e:
+                except Exception:
                     pass  # Skip files that can't be read
 
         return sources
@@ -243,7 +245,7 @@ class DataValidator:
         """Check for Kaggle datasets and metadata."""
         sources = []
         # Check if .kaggle/kaggle.json exists and list datasets
-        kaggle_meta = Path.home() / ".kaggle"
+        _kaggle_meta = Path.home() / ".kaggle"
 
         # List common stock market datasets on Kaggle
         # Note: Requires kaggle API to be installed and authenticated
@@ -255,18 +257,20 @@ class DataValidator:
         ]
 
         for ds in stock_datasets:
-            sources.append(DataSourceMetadata(
-                source_name=ds.split("/")[-1],
-                source_type="kaggle",
-                path=f"kaggle://{ds}",
-                created_at="unknown",
-                last_modified="unknown",
-                file_size_mb=0,
-                record_count=0,
-                symbols_count=0,
-                date_range=("unknown", "unknown"),
-                validation_errors=["Not yet downloaded"],
-            ))
+            sources.append(
+                DataSourceMetadata(
+                    source_name=ds.split("/")[-1],
+                    source_type="kaggle",
+                    path=f"kaggle://{ds}",
+                    created_at="unknown",
+                    last_modified="unknown",
+                    file_size_mb=0,
+                    record_count=0,
+                    symbols_count=0,
+                    date_range=("unknown", "unknown"),
+                    validation_errors=["Not yet downloaded"],
+                )
+            )
 
         return sources
 
@@ -297,27 +301,27 @@ class DataValidator:
 
             # Check 3: Data types
             for col in df.columns:
-                if col.lower() in ['open', 'high', 'low', 'close', 'volume']:
+                if col.lower() in ["open", "high", "low", "close", "volume"]:
                     if not pd.api.types.is_numeric_dtype(df[col]):
                         errors.append(f"Column '{col}' should be numeric but is {df[col].dtype}")
 
             # Check 4: Price sanity (OHLC order)
-            if all(c in df.columns for c in ['open', 'high', 'low', 'close']):
-                invalid = (df['high'] < df['low']).sum()
+            if all(c in df.columns for c in ["open", "high", "low", "close"]):
+                invalid = (df["high"] < df["low"]).sum()
                 if invalid > 0:
                     errors.append(f"{invalid} rows with high < low (invalid OHLC)")
 
             # Check 5: Date continuity (for time series)
-            if 'date' in df.columns or 'Date' in df.columns:
-                date_col = 'date' if 'date' in df.columns else 'Date'
+            if "date" in df.columns or "Date" in df.columns:
+                date_col = "date" if "date" in df.columns else "Date"
                 df[date_col] = pd.to_datetime(df[date_col])
                 gaps = (df[date_col].diff() > timedelta(days=5)).sum()
                 if gaps > 10:
                     errors.append(f"Many date gaps detected ({gaps} gaps > 5 days)")
 
             # Check 6: Freshness
-            if 'date' in df.columns or 'Date' in df.columns:
-                date_col = 'date' if 'date' in df.columns else 'Date'
+            if "date" in df.columns or "Date" in df.columns:
+                date_col = "date" if "date" in df.columns else "Date"
                 max_date = pd.to_datetime(df[date_col]).max()
                 days_stale = (datetime.now().date() - max_date.date()).days
                 if days_stale > 30:
@@ -328,8 +332,10 @@ class DataValidator:
             metadata.data_quality_score = max(0, quality_score)
 
             status = "✓" if not errors else "⚠️"
-            print(f"  {status} {metadata.source_name}: {len(df):,} rows, "
-                  f"quality={metadata.data_quality_score:.2%}")
+            print(
+                f"  {status} {metadata.source_name}: {len(df):,} rows, "
+                f"quality={metadata.data_quality_score:.2%}"
+            )
 
         except Exception as e:
             metadata.validation_errors.append(f"Failed to validate: {e}")
@@ -337,8 +343,7 @@ class DataValidator:
             print(f"  ✗ {metadata.source_name}: {e}")
 
     def _check_cross_source_consistency(
-        self,
-        sources: List[DataSourceMetadata]
+        self, sources: List[DataSourceMetadata]
     ) -> List[CrossSourceIssue]:
         """Check consistency across data sources."""
         issues = []
@@ -364,42 +369,52 @@ class DataValidator:
                 for sname in source_names:
                     if sname in self._loaded_data:
                         df = self._loaded_data[sname].copy()
-                        if 'symbol' in df.columns or 'Symbol' in df.columns:
-                            sym_col = 'symbol' if 'symbol' in df.columns else 'Symbol'
+                        if "symbol" in df.columns or "Symbol" in df.columns:
+                            sym_col = "symbol" if "symbol" in df.columns else "Symbol"
                             df = df[df[sym_col] == symbol]
                         dfs.append((sname, df))
 
                 # Compare close prices
                 if len(dfs) >= 2 and all(len(df) > 0 for _, df in dfs):
                     for i, (sname1, df1) in enumerate(dfs[:-1]):
-                        for sname2, df2 in dfs[i+1:]:
+                        for sname2, df2 in dfs[i + 1 :]:
                             # Merge on date and compare close
-                            if 'close' in df1.columns and 'close' in df2.columns:
+                            if "close" in df1.columns and "close" in df2.columns:
                                 common_dates = pd.to_datetime(
-                                    set(pd.to_datetime(df1['date'] if 'date' in df1.columns else df1.index)) &
-                                    set(pd.to_datetime(df2['date'] if 'date' in df2.columns else df2.index))
+                                    set(
+                                        pd.to_datetime(
+                                            df1["date"] if "date" in df1.columns else df1.index
+                                        )
+                                    )
+                                    & set(
+                                        pd.to_datetime(
+                                            df2["date"] if "date" in df2.columns else df2.index
+                                        )
+                                    )
                                 )
 
                                 for date in list(common_dates)[:5]:  # Sample
-                                    val1 = df1[df1['date'] == date]['close'].values
-                                    val2 = df2[df2['date'] == date]['close'].values
+                                    val1 = df1[df1["date"] == date]["close"].values
+                                    val2 = df2[df2["date"] == date]["close"].values
 
                                     if len(val1) > 0 and len(val2) > 0:
                                         v1, v2 = float(val1[0]), float(val2[0])
                                         if v1 > 0:
                                             pct_diff = abs(v1 - v2) / v1
                                             if pct_diff > 0.02:  # >2% difference
-                                                issues.append(CrossSourceIssue(
-                                                    symbol=symbol,
-                                                    date=str(date),
-                                                    source_1=sname1,
-                                                    source_2=sname2,
-                                                    field='close',
-                                                    value_1=v1,
-                                                    value_2=v2,
-                                                    discrepancy_pct=pct_diff
-                                                ))
-            except Exception as e:
+                                                issues.append(
+                                                    CrossSourceIssue(
+                                                        symbol=symbol,
+                                                        date=str(date),
+                                                        source_1=sname1,
+                                                        source_2=sname2,
+                                                        field="close",
+                                                        value_1=v1,
+                                                        value_2=v2,
+                                                        discrepancy_pct=pct_diff,
+                                                    )
+                                                )
+            except Exception:
                 pass  # Continue on errors
 
         print(f"  ✓ Found {len(issues)} cross-source inconsistencies")
@@ -429,22 +444,25 @@ class DataValidator:
 
         for py_file in py_files[:50]:  # Sample analysis
             try:
-                with open(py_file, 'r') as f:
+                with open(py_file, "r") as f:
                     content = f.read()
-                    lines = content.split('\n')
+                    lines = content.split("\n")
 
                 for issue_type, patterns in leakage_patterns.items():
                     for pattern in patterns:
                         import re
+
                         for i, line in enumerate(lines):
                             if re.search(pattern, line):
-                                issues.append(DataLeakageIssue(
-                                    file_path=str(py_file),
-                                    line_number=i+1,
-                                    issue_type=issue_type,
-                                    severity="low",  # Flag for review
-                                ))
-            except Exception as e:
+                                issues.append(
+                                    DataLeakageIssue(
+                                        file_path=str(py_file),
+                                        line_number=i + 1,
+                                        issue_type=issue_type,
+                                        severity="low",  # Flag for review
+                                    )
+                                )
+            except Exception:
                 pass
 
         print(f"  ✓ Scanned {len(py_files)} scripts, found {len(issues)} potential leakage flags")
@@ -459,7 +477,7 @@ class DataValidator:
 
         for py_file in py_files[:30]:  # Sample
             try:
-                with open(py_file, 'r') as f:
+                with open(py_file, "r") as f:
                     content = f.read()
 
                 used_sources = []
@@ -469,7 +487,7 @@ class DataValidator:
 
                 if used_sources:
                     mapping[str(py_file)] = used_sources
-            except:
+            except Exception:
                 pass
 
         return mapping
@@ -487,9 +505,7 @@ class DataValidator:
         total_symbols = sum(s.symbols_count for s in sources)
         avg_quality = np.mean([s.data_quality_score for s in sources])
 
-        summary = self._generate_summary(
-            sources, cross_issues, leakage_issues, repo_mapping
-        )
+        summary = self._generate_summary(sources, cross_issues, leakage_issues, repo_mapping)
 
         return ValidationReport(
             generated_at=datetime.now().isoformat(),
@@ -535,7 +551,7 @@ class DataValidator:
     @staticmethod
     def _extract_symbols(df: pd.DataFrame) -> set:
         """Extract unique symbols from DataFrame."""
-        for col in ['symbol', 'Symbol', 'ticker', 'Ticker', 'SYMBOL']:
+        for col in ["symbol", "Symbol", "ticker", "Ticker", "SYMBOL"]:
             if col in df.columns:
                 return set(df[col].unique())
         return set()
@@ -543,12 +559,12 @@ class DataValidator:
     @staticmethod
     def _extract_date_range(df: pd.DataFrame) -> Tuple[str, str]:
         """Extract date range from DataFrame."""
-        for col in ['date', 'Date', 'datetime', 'Datetime', 'DATE']:
+        for col in ["date", "Date", "datetime", "Datetime", "DATE"]:
             if col in df.columns:
                 try:
                     dates = pd.to_datetime(df[col])
                     return (str(dates.min().date()), str(dates.max().date()))
-                except:
+                except Exception:
                     pass
         return ("unknown", "unknown")
 
@@ -565,6 +581,7 @@ class DataValidator:
 # ============================================================================
 # KAGGLE DATASET DISCOVERY & INTEGRATION
 # ============================================================================
+
 
 class KaggleDataIntegrator:
     """Discover and integrate Kaggle datasets."""
@@ -612,6 +629,7 @@ class KaggleDataIntegrator:
 # ============================================================================
 # DATA LINEAGE TRACKER
 # ============================================================================
+
 
 class DataLineageTracker:
     """Track data lineage through transformations."""
