@@ -10,7 +10,14 @@ Each company's screener.in export carries a "Data Sheet" with ANNUAL line items
 aligned to a fiscal "Report Date" axis (Mar-YYYY, ~10 years). We extract the
 Piotroski/Coffee-Can inputs per fiscal year:
   net_income, revenue, cfo, borrowings, reserves, equity_capital, other_liab,
-  inventory, receivables, cash, operating_profit, shares.
+  inventory, receivables, cash, operating_profit, shares, dividend_amount.
+
+Also attaches, per fiscal year (2026-07-18, no-lookahead as-of merge from the
+company page's Shareholding Pattern table -- see industry_and_shareholding_of()
+and screener_in_auth.parse_shareholding_dated()):
+  promoter_holding, fii_holding, dii_holding, public_holding, num_shareholders
+Coverage is bounded by what screener.in's page renders (~3 trailing years) --
+fy_ends older than that have no match and stay unset, not fabricated.
 
 CAVEAT vs the US collector: screener.in exposes the fiscal PERIOD-END but NOT the
 filing date. Indian issuers must file audited annual results within ~60 days of the
@@ -53,6 +60,13 @@ _RATE = 0.7  # polite delay between screener.in fetches (ToS-friendly)
 # Consecutive empty fetches before aborting. A real universe has gaps (BSE-only names
 # 404 on the NSE-shaped URL), but ~30 in a row is a block, not a coincidence.
 MAX_CONSECUTIVE_EMPTY = 30
+# 2026-07-18: TIME-based checkpoint floor, alongside the existing every-100-
+# tickers count trigger below -- whichever fires first. The count trigger
+# alone bounds data loss to "100 tickers" but not to a fixed WALL-CLOCK
+# amount; a slow stretch (heavy per-ticker latency, retries) could go well
+# past 10 minutes between count-triggered checkpoints. This bounds worst-
+# case loss on a crash/kill to one interval regardless of throughput.
+_CHECKPOINT_INTERVAL_SEC = 600
 
 # Data-Sheet row label → our field name (annual series only; first present wins).
 FIELDS = {
@@ -89,6 +103,14 @@ FIELDS = {
     "receivables": ["Trade receivables", "Debtors", "Receivables"],
     "cash": ["Cash & Bank", "Cash Equivalents"],
     "shares": ["No. of Equity Shares", "No of Equity Shares"],
+    # 2026-07-18: ported from company_financials() in screener_in_auth.py,
+    # which already extracts this exact row from the same Data Sheet via an
+    # identical row() lookup -- that function's "dividend_history"/
+    # "dividend_pay_years" outputs were never wired into THIS collector's
+    # FIELDS/_extract_annual path, so the annual point-in-time panel this
+    # file builds has been silently missing dividends despite the sister
+    # function already parsing them from the same downloaded workbook.
+    "dividend_amount": ["Dividend Amount", "Dividend Paid", "Dividend Payout"],
 }
 
 
@@ -206,6 +228,30 @@ def industry_of(sess_mod, ticker):
     return m.group(1).strip() if m else None
 
 
+def industry_and_shareholding_of(sess_mod, ticker):
+    """Industry string + quarterly shareholding records from ONE company-page
+    GET (2026-07-18) -- industry_of() and a naive shareholding fetch would
+    each independently re-GET the same page, doubling an already-extra
+    fetch per ticker. Reuses sess_mod.parse_shareholding_dated() (added
+    alongside the live-path _parse_shareholding() in screener_in_auth.py)
+    so both consumers share one regex-parsing implementation."""
+    global _INDUSTRY_RE
+    if _INDUSTRY_RE is None:
+        _INDUSTRY_RE = re.compile(r"Industry[^<]*</[^>]+>\s*<[^>]+>([^<]{2,40})<", re.I)
+    try:
+        s = sess_mod.session()
+        h = s.get(f"https://www.screener.in/company/{ticker}/", timeout=25).text
+    except Exception:
+        return None, []
+    m = _INDUSTRY_RE.search(h)
+    industry = m.group(1).strip() if m else None
+    try:
+        shareholding = sess_mod.parse_shareholding_dated(h)
+    except Exception:
+        shareholding = []
+    return industry, shareholding
+
+
 def is_financial(industry) -> bool:
     """True when the SOURCE classifies this as a lender/financial.
 
@@ -282,12 +328,49 @@ def collect_ticker(sess_mod, ticker):
     except Exception:
         return []
     annual = _extract_annual(df)
-    industry = industry_of(sess_mod, ticker)
+    # 2026-07-18: BUG FOUND IN PRODUCTION. This page fetch used to fire
+    # immediately after the export fetch above with ZERO delay between them
+    # -- only the outer _RATE sleep in main()'s loop applies BETWEEN
+    # tickers' first request, not between a single ticker's two requests.
+    # A live bulk run measured this: industry (and therefore shareholding,
+    # parsed from the same response) succeeded for only ~5% of 1,735
+    # tickers, while the export-sourced fields (revenue, net_income, ...)
+    # were populated normally -- and the SAME fetch succeeded instantly
+    # (1.5s) when tested standalone/isolated, ruling out a broken endpoint
+    # or a real block. This is rate-throttling triggered by the back-to-
+    # back request pattern specifically, not overall request volume (the
+    # export fetch right before it was fine). One retry with backoff,
+    # mirroring the proven pattern main() already uses for collect_ticker()
+    # itself as a whole.
+    time.sleep(_RATE)
+    industry, shareholding = industry_and_shareholding_of(sess_mod, ticker)
+    if industry is None and not shareholding:
+        time.sleep(_RATE * 2)
+        industry, shareholding = industry_and_shareholding_of(sess_mod, ticker)
     lender = is_financial(industry)
     rows = []
     for fy, fields in sorted(annual.items()):
         row = {"ticker": ticker, "fy_end": fy.strftime("%Y-%m-%d")}
         row.update(fields)
+        # As-of shareholding merge (2026-07-18): screener.in gives no filing
+        # date at this stage (see module docstring -- `filed` is computed
+        # downstream in merge_india_fundamentals.py from fy_end + reporting
+        # lag). Reuse that SAME documented default (90 days) here, locally,
+        # purely to pick the latest shareholding quarter that was actually
+        # knowable as of this filing -- never a future quarter relative to
+        # it. `shareholding` only covers screener.in's trailing ~3-year
+        # window (see parse_shareholding_dated()'s docstring): fy_ends
+        # further back than that from TODAY have no match and stay
+        # unset/NaN, which is correct, not a bug -- there is no page to
+        # fetch that would answer for periods that old.
+        implied_filed = fy + pd.Timedelta(days=90)
+        candidates = [s for s in shareholding if s["quarter_end"] <= implied_filed.date()]
+        if candidates:
+            best = max(candidates, key=lambda s: s["quarter_end"])
+            for k in ("promoter_holding", "fii_holding", "dii_holding",
+                      "public_holding", "num_shareholders"):
+                if k in best:
+                    row[k] = best[k]
         # EBIT and capital employed, derived from reported annual line items so
         # downstream ROCE consumers never re-derive them inconsistently.
         pbt, interest = row.get("profit_before_tax"), row.get("interest")
@@ -449,6 +532,38 @@ def _universe(args):
     return equities
 
 
+def _validate_progress(df, prev_df, new_field_names):
+    """Sanity-check that a checkpoint is real forward progress, not a
+    silently-degenerate collection -- a DIFFERENT failure mode than the
+    Blocked/MAX_CONSECUTIVE_EMPTY circuit breaker above, which only catches
+    connection-level refusal. A host that returns 200s with a changed page
+    layout (regex stops matching) would sail past that breaker while
+    quietly writing empty-field rows -- this catches THAT.
+
+    Checked only on rows ADDED since the previous checkpoint, not the whole
+    accumulated file -- diluting a live problem under thousands of already-
+    good historical rows would hide exactly the failure this exists to
+    catch. Returns a list of warning strings (empty list = healthy)."""
+    warnings_found = []
+    if df.empty:
+        warnings_found.append("checkpoint produced ZERO rows total")
+        return warnings_found
+    n_new = len(df) - (len(prev_df) if prev_df is not None else 0)
+    if prev_df is not None and n_new <= 0:
+        warnings_found.append(f"no new rows since the last checkpoint (still {len(df):,} total)")
+        return warnings_found
+    recent = df.tail(n_new) if n_new > 0 else df
+    if len(recent) >= 20:
+        for field in new_field_names:
+            if field in recent.columns:
+                pct = recent[field].notna().mean() * 100
+                if pct == 0:
+                    warnings_found.append(
+                        f"{field}: 0% populated over the last {len(recent):,} new rows"
+                    )
+    return warnings_found
+
+
 def main():
     ap = argparse.ArgumentParser(description="Collect India historical financials from screener.in")
     ap.add_argument("--tickers", nargs="*", help="explicit NSE symbols (else the India universe)")
@@ -489,7 +604,14 @@ def main():
             df.to_parquet(OUT, index=False)
         return df
 
+    # Fields this session's shareholding/dividend wiring added -- what
+    # _validate_progress() watches for silent zero-coverage.
+    _NEW_FIELDS = ("dividend_amount", "promoter_holding", "fii_holding",
+                   "dii_holding", "public_holding", "num_shareholders")
+
     rows, n_ok, t0, _consec_empty = [], 0, time.time(), 0
+    _last_checkpoint_t = time.time()
+    _last_checkpoint_df = existing[0] if existing else None
     for i, tk in enumerate(todo, 1):
         time.sleep(_RATE)
         # ONE retry on empty before it counts against the circuit breaker. Proven
@@ -542,9 +664,16 @@ def main():
             )
             _checkpoint()
             break
-        if i % 100 == 0 or i == len(todo):
+        due_by_count = i % 100 == 0 or i == len(todo)
+        due_by_time = (time.time() - _last_checkpoint_t) >= _CHECKPOINT_INTERVAL_SEC
+        if due_by_count or due_by_time:
             df = _checkpoint()
-            print(f"  {i}/{len(todo)} | {n_ok} with data | {len(df)} rows | {time.time()-t0:.0f}s")
+            trigger = "count" if due_by_count else "10min"
+            print(f"  [{trigger}] {i}/{len(todo)} | {n_ok} with data | {len(df)} rows | {time.time()-t0:.0f}s")
+            for w in _validate_progress(df, _last_checkpoint_df, _NEW_FIELDS):
+                print(f"  ⚠ VALIDATION: {w}")
+            _last_checkpoint_df = df
+            _last_checkpoint_t = time.time()
     print(f"done → {os.path.relpath(OUT, BASE)}")
 
 

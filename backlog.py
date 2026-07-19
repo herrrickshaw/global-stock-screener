@@ -65,12 +65,15 @@ _SEED: List[dict] = [
     {
         "id": "F-04",
         "type": "Feature",
-        "title": "Trendlyne DVM scores + promoter pledge into decision factors",
+        "title": "Trendlyne DVM scores + promoter pledge into decision factors "
+                 "(2026-07-18: promoter/FII/DII/public HOLDING % now sourced -- see "
+                 "screener_in_auth.py's _parse_shareholding(); PLEDGE % specifically "
+                 "and Trendlyne DVM remain outstanding, see DATA_SOURCES.md #6)",
         "value": 13,
         "time_criticality": 5,
         "risk": 5,
         "job_size": 5,
-        "status": "todo",
+        "status": "in_progress",
         "epic": "Fundamentals depth",
     },
     {
