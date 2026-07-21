@@ -35,6 +35,7 @@ Output: cache_seed/fundamentals_history/IN.parquet — long format, one row per
 """
 import argparse
 import io
+import hashlib
 import os
 import re
 import time
@@ -496,6 +497,37 @@ def collect_ticker(sess_mod, ticker):
     return rows
 
 
+def _shuffled(syms):
+    """Deterministic, alphabet-independent ordering.
+
+    🔴 THE PANEL WAS AN ALPHABETICAL SAMPLE AND NOBODY NOTICED.
+    This function returned `sorted(set(...))`, and the caller then does
+    `universe[:limit]`. screener.in hard-blocks after roughly 50-155 requests
+    per session, so every session that has ever run collected an alphabetical
+    PREFIX. Measured 2026-07-21, the India factor panel held 135 tickers:
+
+        {'2': 1, '3': 3, '5': 1, '6': 1, 'A': 127, 'B': 2}
+
+    127 of 135 began with "A" and the list stopped at BAGFILMS. Every factor
+    result computed off that panel — Piotroski, ROCE, debt-cycle, and all the
+    combination tests — was a statement about companies whose name starts with
+    A, presented as a statement about the Indian market. Growing the panel from
+    108 to 135 just added more A's, so the sample looked like it was improving
+    while staying exactly as biased.
+
+    This is the same defect already documented for the US price panel (an
+    interrupted alphabetical collection missing CME/CMI). Alphabetical order
+    correlates with nothing financial, which is precisely why a truncated
+    alphabetical sample LOOKS random until you count the first letters.
+
+    Hash order is deterministic — the same universe yields the same sequence,
+    so runs stay reproducible and resumption still works via the `done` set —
+    but it is uncorrelated with the alphabet, so a session that dies early
+    leaves a representative sample instead of a prefix.
+    """
+    return sorted(syms, key=lambda s: hashlib.md5(s.encode()).hexdigest())
+
+
 def _universe(args):
     if args.tickers:
         return [t.upper() for t in args.tickers]
@@ -507,7 +539,7 @@ def _universe(args):
         if args.liquid_only and os.path.exists(LTM):
             liq = set(pd.read_parquet(LTM, columns=["Symbol"])["Symbol"].astype(str).str.upper())
             syms = [s for s in syms if s in liq]
-        return syms
+        return _shuffled(syms)
     # The universe CSV is a build artifact and is often absent. The LTM price
     # parquet is the better source anyway: it IS the traded universe, and
     # --liquid-only only ever intersected against it. Crashing on a missing
@@ -516,7 +548,7 @@ def _universe(args):
         raise SystemExit(f"no universe: neither {UNIVERSE} nor {LTM} exists")
     px = pd.read_parquet(LTM, columns=["Symbol", "Close", "Volume", "Date"])
     if not args.liquid_only:
-        return sorted(set(px["Symbol"].astype(str).str.upper()))
+        return _shuffled(set(px["Symbol"].astype(str).str.upper()))
     # --liquid-only MUST still filter here. The first cut of this fallback ignored
     # the flag and returned all 8,944 symbols in the LTM parquet, turning a ~28-minute
     # job into a ~3.5-HOUR one against a rate-limited host — and silently, because the
