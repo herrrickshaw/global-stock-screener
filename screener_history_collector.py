@@ -614,10 +614,22 @@ def main():
             g = prev.copy()
             g["_tk"] = g["ticker"].astype(str).str.upper()
             has_cfo = g.groupby("_tk")["cfo"].apply(lambda x: x.notna().any())
-            from_scr = g.groupby("_tk")["source"].apply(
-                lambda x: (x.astype(str) == "screener_in").any())
             nyr = g.groupby("_tk")["fy_end"].nunique()
-            keep = set(has_cfo.index[(has_cfo) & (from_scr) & (nyr >= 3)])
+            # Usable = has cfo AND >=3 fiscal years. The source label is NOT part
+            # of the test.
+            #
+            # It used to also require source == "screener_in", which excluded
+            # THIS collector's own output: rows written by the current path carry
+            # a null source, so 201 fully-populated tickers (cfo 94.7%,
+            # borrowings 88.3%, median 10 FY) were classed as thin and queued for
+            # re-fetch. At ~50-155 requests before screener.in starts blocking,
+            # that is two entire sessions spent re-downloading good data.
+            #
+            # The source check was standing in for "not a yfinance-only row", but
+            # cfo presence already establishes that — yfinance supplies cfo on
+            # 2.9% of rows. Measured 2026-07-21: usable 281 -> 524, re-fetch
+            # 1,575 -> 1,332.
+            keep = set(has_cfo.index[(has_cfo) & (nyr >= 3)])
             print(f"  --refresh-thin: {len(keep)} tickers usable, "
                   f"{len(done) - len(keep)} to re-fetch")
             done = keep
