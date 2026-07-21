@@ -95,6 +95,18 @@ FIELDS = {
     "power_and_fuel": ["Power and Fuel"],
     "other_mfr_exp": ["Other Mfr. Exp", "Other Mfr Exp"],
     "cfo": ["Cash from Operating Activity", "Cash from Operating Activity+"],
+    # TOTAL ASSETS. screener.in labels this row just "Total" — it appears TWICE
+    # in the BALANCE SHEET block: row 60 closes liabilities+equity, row 65 closes
+    # assets. Verified 2026-07-21 on RELIANCE and TCS: the two rows are
+    # bit-identical across all 10 fiscal years (max abs diff 0), as the accounting
+    # identity requires, so first-match is safe and `seen` taking row 60 is fine.
+    #
+    # This row was NEVER mapped, which is why total_assets was 0% on every
+    # screener-sourced row. Five of nine Piotroski tests use it as a denominator
+    # (F1, F3, F4, F9) and two more need the balance sheet (F5, F6), so f_tested
+    # capped at 3 and the India panel reported piotroski=0 for 3,405 firm-years —
+    # a missing field reading as "the factor never fires".
+    "total_assets": ["Total"],
     "borrowings": ["Borrowings", "Borrowings+", "Total Debt"],
     "reserves": ["Reserves"],
     "equity_capital": ["Equity Capital", "Equity Share Capital", "Share Capital"],
@@ -569,6 +581,9 @@ def main():
     ap.add_argument("--tickers", nargs="*", help="explicit NSE symbols (else the India universe)")
     ap.add_argument("--limit", type=int, default=0, help="cap number of tickers (testing)")
     ap.add_argument(
+        "--refresh-thin", action="store_true",
+        help="re-fetch tickers whose stored rows lack cfo / screener.in source / >=3 fiscal years")
+    ap.add_argument(
         "--liquid-only", action="store_true", help="only names present in cache_seed/ltm/IN.parquet"
     )
     args = ap.parse_args()
@@ -587,6 +602,25 @@ def main():
         prev = pd.read_parquet(OUT)
         done = set(prev["ticker"].astype(str).str.upper())
         existing = [prev]
+
+        # --refresh-thin: a ticker counts as "done" only if its stored rows are
+        # actually USABLE. Presence alone means done otherwise, so the tickers
+        # carrying yfinance-sourced rows (no cfo, ~2 fiscal years) are skipped
+        # forever and the panel can never become backtestable. Measured
+        # 2026-07-21: cfo present on 153 of 1,654 PIT rows, so Piotroski tests 2
+        # and 4 are uncomputable for 91% of names and the score cannot be formed
+        # at all. Re-fetching those from screener.in is the entire point.
+        if getattr(args, "refresh_thin", False):
+            g = prev.copy()
+            g["_tk"] = g["ticker"].astype(str).str.upper()
+            has_cfo = g.groupby("_tk")["cfo"].apply(lambda x: x.notna().any())
+            from_scr = g.groupby("_tk")["source"].apply(
+                lambda x: (x.astype(str) == "screener_in").any())
+            nyr = g.groupby("_tk")["fy_end"].nunique()
+            keep = set(has_cfo.index[(has_cfo) & (from_scr) & (nyr >= 3)])
+            print(f"  --refresh-thin: {len(keep)} tickers usable, "
+                  f"{len(done) - len(keep)} to re-fetch")
+            done = keep
     todo = [t for t in universe if t not in done]
     print(
         f"screener.in history: {len(universe)} tickers, {len(done)} already done, "
@@ -600,6 +634,21 @@ def main():
             else pd.DataFrame()
         )
         if not df.empty:
+            # Newly fetched rows carry fy_end/filed as STRINGS; rows already on
+            # disk carry timestamps. Concatenating gives an object column and
+            # pyarrow refuses to write it ("object of type str cannot be
+            # converted to int"), which kills the run at the first checkpoint —
+            # i.e. after the fetches have been paid for and before anything is
+            # saved. Coerce both to datetime before writing.
+            for _c in ("fy_end", "filed", "filed_nse"):
+                if _c in df.columns:
+                    df[_c] = pd.to_datetime(df[_c], errors="coerce")
+            # Re-fetched tickers appear twice; keep the richer screener.in row.
+            if {"ticker", "fy_end"} <= set(df.columns):
+                df["_pref"] = (df.get("source", "").astype(str) == "screener_in").astype(int)
+                df = (df.sort_values("_pref")
+                        .drop_duplicates(subset=["ticker", "fy_end"], keep="last")
+                        .drop(columns=["_pref"]))
             os.makedirs(OUT_DIR, exist_ok=True)  # survive a mid-run dir wipe
             df.to_parquet(OUT, index=False)
         return df
