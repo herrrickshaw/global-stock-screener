@@ -82,3 +82,11 @@ data/curated/*.md
 # SEC historical financials (derived — rebuild with sec_history_collector.py)
 cache_seed/fundamentals_history/*
 !cache_seed/fundamentals_history/*.parquet
+# Superseded 2026-07-22 by global-market-data/warehouse/ (year-partitioned).
+# Local files remain as caches (fundamentals_offhours + screener collector read
+# them as a universe list); the warehouse is the tracked price store.
+cache_seed/ltm/IN.parquet
+cache_seed/ltm/JP.parquet
+cache_seed/ltm/KR.parquet
+cache_seed/ltm/CN.parquet
+cache_seed/ltm/US.parquet
