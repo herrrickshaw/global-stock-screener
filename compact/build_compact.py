@@ -42,7 +42,9 @@ for mkt in markets:
         continue
     src = f"{WH}/{mkt}/year=*.parquet"
     extra = ""
-    gp = f"{GAPFILL}/gapfill_{mkt}.parquet"
+    GAPFILL_NAME = {"CN": "china", "EU": "europe", "JP": "japan",
+                    "KR": "korea", "US": "us"}
+    gp = f"{GAPFILL}/gapfill_{GAPFILL_NAME.get(mkt, mkt.lower())}.parquet"
     if os.path.exists(gp):  # union in EC2 gap-fill rows once merged
         extra = f" UNION ALL SELECT Date, Symbol, Open, High, Low, Close, Volume FROM read_parquet('{gp}')"
     out = f"{OUT}/{mkt}_2025plus.parquet"
