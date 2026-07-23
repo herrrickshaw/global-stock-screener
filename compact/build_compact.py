@@ -17,10 +17,29 @@ GAPFILL = os.path.expanduser("~/repos/global-market-data/warehouse/gapfill_ec2")
 OUT = os.path.dirname(os.path.abspath(__file__))
 SINCE = "2025-01-01"
 
+BHAV_DB = os.path.expanduser("~/data/bhavcopy.duckdb")
+
 con = duckdb.connect()
 sizes = {}
 markets = sorted(d for d in os.listdir(WH) if os.path.isdir(f"{WH}/{d}"))
 for mkt in markets:
+    if mkt == "IN" and os.path.exists(BHAV_DB):
+        # Full NSE+BSE universe (7,841 syms) from official bhavcopy, NSE
+        # precedence pre-resolved — supersedes the warehouse's 6,088-sym panel.
+        out = f"{OUT}/IN_2025plus.parquet"
+        con.execute(f"ATTACH '{BHAV_DB}' AS bhav (READ_ONLY)")
+        con.execute(f"""
+            COPY (
+              SELECT trade_date AS Date, symbol AS Symbol, "open" AS Open,
+                     high AS High, low AS Low, "close" AS Close, volume AS Volume
+              FROM bhav.cleaned_ohlcv
+              WHERE trade_date >= DATE '{SINCE}'
+              ORDER BY Symbol, Date
+            ) TO '{out}.tmp' (FORMAT PARQUET, COMPRESSION ZSTD, COMPRESSION_LEVEL 19)""")
+        con.execute("DETACH bhav")
+        os.replace(f"{out}.tmp", out)
+        sizes["IN"] = os.path.getsize(out)
+        continue
     src = f"{WH}/{mkt}/year=*.parquet"
     extra = ""
     gp = f"{GAPFILL}/gapfill_{mkt}.parquet"
