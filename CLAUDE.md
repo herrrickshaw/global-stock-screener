@@ -1,94 +1,54 @@
-# Memory
+# CLAUDE.md — global-stock-screener
 
-## Me
-Uma — Senior professional based in Bhopal. Dual Degree Chemical Engineering (IIT Madras) + MBA Accounting & Finance (ESMT Berlin). Background: Shell (LNG process engineering), Invest India (FDI/investment promotion, oil & gas), GITA/MPIDC (state investment strategy, Madhya Pradesh), Ritzenhöfer & Company (Germany, consulting), Synergy Marine Group (business transformation). Currently: independent consulting/advisory + active job search.
+## What this repo is
 
----
+A 20-market equity screener that **ships with ~1 year of cached price data** (~40,000 symbols
+across the world's major exchanges) — clone and get screening results in minutes, no API keys,
+no LLM tokens. Sibling repo to [`global-market-data`](https://github.com/herrrickshaw/global-market-data),
+which does the same strategy library over a deeper 10-year point-in-time history for backtesting;
+this repo is for *today's* screen results.
 
-## Active Workstreams
+> ⚠️ Educational / research only. NOT investment advice. Screener output is a mechanical filter,
+> not a buy/sell signal.
 
-| Project | What |
-|---------|------|
-| **Distillery Model** | 200 KLPD grain-based distillery financial model; GOI interest subvention scheme for CSMs |
-| **CSM M&A** | Cooperative Sugar Mill partnership entry structures (JV, BOT, BOOT, PPP); pitch deck + policy brief |
-| **Ethanol Policy** | EBP blending targets, overcapacity analysis (CareEdge/PIB), multi-feedstock conversion |
-| **CBG/SATAT** | Compressed Biogas scheme; state-wise Gobardhan data; blending obligation presentation |
-| **IPO Tracking** | TruAlt Bioenergy, Godavari Biorefineries; ethanol/distillery IPO pipeline |
-| **PE/VC Database** | India-focused PE/VC investor mapping; deal origination in bioenergy |
-| **Flipcarbon** | Business strategy document consulting/BD engagement |
-| **Sri Tara Global** | Family health & wellness products (malts, dosa mixes, wellness soups); international e-commerce |
+## Run
 
----
+```bash
+git lfs install && git clone https://github.com/herrrickshaw/global-stock-screener.git
+cd global-stock-screener && git lfs pull
+pip install -r requirements.txt
+python run.py                         # global momentum leaderboard
+python run.py --strategy garp --market US --top 25
+python run.py --brief                 # full Daily Market Brief → results/daily_brief.html
+python run.py --list                  # all strategies & markets
+python preflight.py --ensure          # verify/establish LFS data + packages + serving views
+```
 
-## Terms & Acronyms
+`run.py` auto-bootstraps the cached data into a fast local store on first use.
 
-| Term | Meaning |
-|------|---------|
-| EBP | Ethanol Blending Programme (GOI) |
-| CSM | Cooperative Sugar Mill |
-| KLPD | Kilolitres Per Day (distillery capacity unit) |
-| NCDC | National Cooperative Development Corporation (loan scheme) |
-| SATAT | Sustainable Alternative Towards Affordable Transportation (CBG scheme) |
-| CBG | Compressed Biogas |
-| SAF | Sustainable Aviation Fuel |
-| DDGS | Dried Distillers Grains with Solubles (distillery co-product) |
-| FDI | Foreign Direct Investment |
-| IEM | Industrial Entrepreneur Memorandum (DPIIT investment tracking) |
-| DPIIT | Dept for Promotion of Industry and Internal Trade |
-| MPIDC | Madhya Pradesh Industrial Development Corporation |
-| GITA | Global Innovation & Technology Alliance |
-| LNG | Liquefied Natural Gas |
-| HCV | Heavy Commercial Vehicle |
-| TCO | Total Cost of Ownership |
-| DISCOM | Distribution Company (power sector) |
-| CRMB | Crumb Rubber Modified Bitumen |
-| PPO | Proximal Policy Optimization (RL) |
-| NPV/IRR | Net Present Value / Internal Rate of Return |
-| BOT/BOOT | Build-Operate-Transfer / Build-Own-Operate-Transfer |
-| PPP | Public-Private Partnership |
-| PARIVESH | MoEFCC environmental clearance portal |
-| VDA/ACMA/SIAM | German/Indian auto industry associations |
+## Key docs (read before assuming, don't duplicate here)
 
----
+| Doc | What |
+|---|---|
+| `DATA_AND_MODULES.md` | module map, what each script does |
+| `ARCHITECTURE.md` | system design |
+| `DATA_SOURCES.md` / `EXCHANGE_COVERAGE.md` | where data comes from, per-market coverage |
+| `DATA_VALIDATION_GUIDE.md` | data quality checks |
+| `AUTO_SCREENER.md` | the mailer/automation path |
 
-## Key Sectors & Expertise
+Before enabling or modifying any schedule around `send_mailer.py`, confirm it still has a
+duplicate-send guard (or that callers audit per-day send-count before invoking `--send`) —
+a mailer without one is a recurring footgun elsewhere in this account's pipelines.
 
-- **Bioenergy:** Ethanol, CBG, SAF, biodiesel — policy, financial modelling, M&A
-- **Oil & Gas / LNG:** Process engineering (Shell), BD (Codvo-type roles), LNG shift supervisor
-- **Investment Promotion:** FDI facilitation (Invest India), state-level (MP, Tamil Nadu)
-- **Financial Modelling:** NPV/IRR, DCF, distillery models, TCO, startup valuation, DISCOM debt
-- **Equity Research:** Indian banking, Praj Industries, SPARC pharma, small-cap screening
-- **ML/Quant:** XGBoost + UMAP/HDBSCAN + PPO RL for Indian small-cap stock screening
+## Cross-session project memory
 
----
-
-## Active Job Search — Target Roles
-
-| Role Type | Notes |
-|-----------|-------|
-| Boutique IB / M&A advisory | Xpertiz-type; bioenergy, infra |
-| BD / Investment Promotion | Gallup BDM, DPIIT-adjacent |
-| LNG / O&G Operations | Shift Supervisor (Qatar, Middle East) |
-| PPP / Project Development | Infrastructure, bioenergy |
-| Oil & Gas BD | Codvo-type |
-
----
-
-## Preferences
-
-- Deliverables: Excel models, Word reports (.docx), PowerPoint decks (.pptx), PDFs
-- Python for quantitative work (pandas, numpy, sklearn, matplotlib)
-- Structured output: tables, numbered sections, exec summaries first
-- Financial models: always include NPV, IRR, sensitivity tables
-- Pitch decks: problem → market → solution → financials → ask structure
-- Cover letters: concise, achievement-led, 3 paragraphs max
-- India-focus by default unless stated otherwise
-
----
-
-## Deep Memory Index
-
-→ Sector detail: bioenergy policy, LNG/O&G, FDI/investment promotion  
-→ Models built: distillery 200 KLPD, TCO HCV, DISCOM debt, startup valuation, INR/USD regression  
-→ Geographies: India (MP, TN, Northeast), Germany, Qatar, Singapore  
-→ Relationships: Invest India network, MPIDC/GITA contacts, Shell alumni, ESMT Berlin network
+A Claude Code session rooted here has no persisted memory of its own. Decisions, hazards, and
+credential locations for the broader market-research platform (of which this screener is one
+project — see `project_bhavcopy_phase1`-successor and `project_systematic_strategy_platform` in
+that memory) live under the `~` (home) session instead: `~/.claude/projects/-Users-umashankar/memory/`,
+indexed by `MEMORY.md` and mapped by the `reference_memory_map` memory. From here, reach it with
+`qmd search "<topic>"` (indexes that memory directory regardless of working directory) rather than
+assuming this session has its own history. For fast orientation, a published snapshot of 128
+incident-sourced rules from across that memory is browsable at
+https://claude.ai/code/artifact/e29ceaeb-099e-4de7-ab43-dcd97a2d8f57 ("Ways of Working") — a
+starting point, not authoritative over the live memory files.
