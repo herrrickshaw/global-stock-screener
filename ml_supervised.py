@@ -162,9 +162,13 @@ def _make_model():
 
 # ── train with walk-forward validation ───────────────────────────────────────────
 def train(market: str, horizon: int = 252, verbose: bool = True) -> dict:
+    import logging
+
     import joblib
     from sklearn.metrics import accuracy_score
     from sklearn.model_selection import TimeSeriesSplit
+
+    log = logging.getLogger(__name__)
 
     # 252d (1y-forward) is the doc's target. If the LTM isn't deep enough yet to
     # leave a full forward window, fall back to the largest horizon that yields
@@ -195,6 +199,27 @@ def train(market: str, horizon: int = 252, verbose: bool = True) -> dict:
     model = _make_model()
     model.fit(X, y)  # final fit on all data
     joblib.dump({"model": model, "features": feat, "horizon": horizon}, MODEL_DIR / f"{market}.pkl")
+
+    try:
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+        from backend.ml import registry
+
+        with registry.start_run(experiment="ml_supervised", run_name=market):
+            registry.log_params({"market": market, "horizon": horizon})
+            registry.log_metrics(
+                {
+                    "cv_acc_mean": float(np.mean(accs)),
+                    "cv_acc_std": float(np.std(accs)),
+                    "samples": len(ds),
+                }
+            )
+            registry.log_sklearn_model(
+                model, artifact_path="model", registered_model_name=f"ml_supervised_{market}"
+            )
+    except Exception:
+        log.warning("MLflow logging failed, continuing with local pickle only", exc_info=True)
 
     imp = _importances(model, X, y)
     lev_used = [c for c in feat if c in LEV_FEATURES]
