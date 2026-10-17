@@ -65,6 +65,28 @@ Exchange bhavcopy (NSE/BSE), SEC EDGAR (US fundamentals), JPX/KRX/SGX/Euronext/
 Eastmoney (universes), Yahoo→Stooq (prices, with fallback), Damodaran & Fama-French
 (reference), screener.in (India CCC), RSS + VADER (news sentiment — not an LLM).
 
+## Literature context
+
+Pointers into the author's private research log (`market-pipeline/research/LITERATURE_REGISTER.md`, as of 2026-10-17), limited to entries bearing on this repo's design (survivorship, point-in-time data, costs, leakage). Grades are the register's own wording; where it states none, none is given. This section summarises what the register records; it is not an independent review of the papers.
+
+| arXiv id | Title | Register grade |
+|---|---|---|
+| 0810.1922 | Look-Ahead Benchmark Bias in Portfolio Performance Evaluation (Daniel, Sornette, Wohrmann) | high |
+| 2603.19380 | Survivorship Bias in Emerging Market Small-Cap Indices: India's NIFTY Smallcap 250 (Ranse) | moderate-to-weak |
+| 2607.06502 | What Useful Alphas? (Chen, Welch) | strong |
+| 2605.23959 | When Alpha Disappears: A One-Switch Benchmark for Decision-Time Leakage in Financial Backtests | none stated |
+| 2603.20319 | Implementation Risk in Portfolio Backtesting (Yin et al.) | none stated |
+
+## Open questions from literature
+
+Taken from the register's `BACKTEST_QUEUE.md`; all are unrun and unanswered.
+
+1. Are benchmarks built from a drifting cross-section inflating excess returns (queue item 28, motivated by 0810.1922)?
+2. Does a market-cap-coverage investable-universe filter (2607.06502) remove a comparable share of the edge in this repo's screens?
+3. Are the cached price panels survivorship-free for delisted names in every market? The register records this only for the India bhavcopy panel (context: 2603.19380); other markets are unverified here.
+4. Would one shared cost convention (cost on traded delta, per side) change the sign of any headline result (queue cost-convention item; 2603.20319)?
+5. Fundamentals use a fiscal-year-end plus lag proxy in places; queue item 5 proposes `filed`-date point-in-time discipline instead. `sec_history_collector.py` already carries `filed` for US.
+
 ## Tests
 
 ```bash

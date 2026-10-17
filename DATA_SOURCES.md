@@ -31,6 +31,13 @@ Every external data source the system references, what we **currently use**, and
 - **Currently used (US):** net income, revenue, ROE/ROA, CFO, EBIT, current ratio, debt, margins, asset turnover, shares, EPS growth → Piotroski, ROCE, Magic Formula, decision engine.
 - **Unused potential:** the **full XBRL fact set** — segment revenue, R&D, capex history, inventory/receivables/payables (full CCC), share buybacks, deferred revenue, per-quarter series, **8-K/10-K filing dates & text** — enables quarterly-trend models, accrual/earnings-quality flags, and event studies around filings.
 
+### 4b. SEC EDGAR submissions (SIC industry code) — `sec_sic_collector.py` (added 2026-10-17)
+- **Source:** `data.sec.gov/submissions/CIK##########.json` (keyless; contact User-Agent only), ticker→CIK from `sec.gov/files/company_tickers.json`.
+- **Verified:** live sample of 250 US tickers (deterministic every-Nth of `data/global_universe/US.csv`) at ~8 req/s; 250/250 responded, 239 carry a SIC code + description (114 distinct codes; 11 have none), plus exchange, filer category, state of incorporation, fiscal-year-end. Output: `reference_seed/sec_sic_US.csv` (30 KB). Run is a sample, NOT the full US universe; `--limit 7000` would take ~15 min.
+- **Gap filled:** untapped-win #3 (sector/industry classification) for US, as a regulator-issued cross-check to the best-effort yfinance sector in `sector_map.py`. Not yet joined into any screen; SIC is coarse (e.g. "Blank Checks", "Finance Services") and is a current snapshot, not point-in-time.
+- **Tried, no new gap filled:** NSE `sec_bhavdata_full_<date>.csv` (delivery %) -- already consumed by `delivery_signal.py`; a single curl from this session returned no HTTP response (connection failure), so not re-verified here. SEC `companyfacts` already used (#4).
+- **Candidates not tested (no keyless fundamentals found):** ESMA/FCA registers hold entity/instrument reference data, not financials; not pursued.
+
 ### 5. screener.in — public screens — `screener_in.py`, `public_screens.py`
 - **Currently used (IN):** 26 curated popular screens (Bull Cartel, Piotroski, Magic Formula, CCC, …) as validation ground-truth + the CCC metric.
 - **Unused potential:** each screen page exposes **ROCE/ROE/OPM/sales & profit growth/P/E/dividend columns** we only partially parse; the **query definitions** themselves (login) encode analyst logic we could replicate; peer/sector pages give **sector medians** for relative valuation.
