@@ -81,9 +81,13 @@ def con():
     return c
 
 
-def sql(query: str) -> pd.DataFrame:
-    """Run arbitrary SQL against the `ltm` / `serving` views → DataFrame."""
-    return con().execute(query).fetchdf()
+def sql(query: str, params: Optional[list] = None) -> pd.DataFrame:
+    """Run arbitrary SQL against the `ltm` / `serving` views → DataFrame.
+
+    `params` binds `?` placeholders so caller-supplied values (symbols, markets,
+    dates) are never spliced into the SQL text."""
+    c = con()
+    return (c.execute(query, params) if params else c.execute(query)).fetchdf()
 
 
 def bars(
@@ -93,26 +97,32 @@ def bars(
     end: Optional[str] = None,
 ) -> pd.DataFrame:
     """OHLCV bars for a symbol over an optional date range (range query, pruned)."""
-    where = [f"Symbol = '{symbol}'"]
+    where, params = ["Symbol = ?"], [symbol]
     if market:
-        where.append(f"Market = '{market}'")
+        where.append("Market = ?")
+        params.append(market)
     if start:
-        where.append(f"Date >= DATE '{start}'")
+        where.append("Date >= CAST(? AS DATE)")
+        params.append(start)
     if end:
-        where.append(f"Date <= DATE '{end}'")
+        where.append("Date <= CAST(? AS DATE)")
+        params.append(end)
     return sql(
         f"SELECT Date, Open, High, Low, Close, Volume FROM ltm "
-        f"WHERE {' AND '.join(where)} ORDER BY Date"
+        f"WHERE {' AND '.join(where)} ORDER BY Date",
+        params,
     )
 
 
 def latest(market: str, where: str = "TRUE") -> pd.DataFrame:
     """Newest bar per symbol for a market (QUALIFY window) with an optional filter."""
+    # `where` is a caller-authored SQL fragment by design; `market` is bound.
     return sql(
         f"""SELECT * FROM (
               SELECT *, row_number() OVER (PARTITION BY Symbol ORDER BY Date DESC) rn
-              FROM ltm WHERE Market = '{market}'
-            ) WHERE rn = 1 AND ({where}) ORDER BY Symbol"""
+              FROM ltm WHERE Market = ?
+            ) WHERE rn = 1 AND ({where}) ORDER BY Symbol""",
+        [market],
     )
 
 
