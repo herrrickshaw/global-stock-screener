@@ -3,7 +3,7 @@ Market Data Context - Repository Interfaces
 Abstracts persistence details from domain logic
 """
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from datetime import datetime
 from typing import List, Optional
 
@@ -12,7 +12,7 @@ from src.shared.domain.base import Repository
 from .models import MarketData, Ticker
 
 
-class MarketDataRepository(ABC, Repository):
+class MarketDataRepository(Repository):
     """
     Repository for MarketData aggregates
     Abstracts how market data is persisted
