@@ -12,12 +12,18 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
-from db_handler import DatabaseHandler
-from vcrud_manager import LocalFileIndexer
-
 REPO = Path(__file__).parent
+# db_handler / vcrud_manager ship in .vcrud_bin/ (same convention as ingest_gate.py)
+_VB = str(REPO / ".vcrud_bin")
+if _VB not in sys.path:
+    sys.path.insert(0, _VB)
+
+from db_handler import DatabaseHandler  # noqa: E402
+from vcrud_manager import LocalFileIndexer  # noqa: E402
+
 DB_URL = os.environ.get("DB", "postgresql://umashankar@localhost/vcrud")
 BRANCH = os.environ.get("BRANCH", "karz")
 
