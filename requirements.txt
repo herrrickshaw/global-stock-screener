@@ -29,6 +29,8 @@ investpy>=1.0.8
 
 # analytics & progress (Colab ships scipy/matplotlib; tqdm used by some scanners)
 scipy>=1.10
+scikit-learn>=1.3   # ml_factor_screener.py, f1_hyperparameter_tuning.py, auto_screener.py (top-level import)
+curl_cffi>=0.6      # deep_prices.py, local_collect.py (browser-impersonating yfinance session)
 matplotlib>=3.7
 tqdm>=4.65
 # note: deoldify.py (image experiment) needs torch/fastai — install separately if used.
