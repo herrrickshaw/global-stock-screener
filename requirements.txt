@@ -18,7 +18,7 @@ openpyxl>=3.1        # read/write .xlsx scan outputs
 yfinance>=0.2.40     # global OHLC (with stooq fallback in data_sources.py)
 nsepython>=2.9       # NSE live + holiday calendar
 bseindia>=1.1        # BSE symbols
-nse>=3.0             # NSE/BSE bhavcopy EOD files
+nse>=5.1.2             # NSE/BSE bhavcopy EOD files
 
 # news sentiment (local lexicon — NOT an LLM)
 feedparser>=6.0      # RSS feeds (Moneycontrol/ET/CNBC/...)
