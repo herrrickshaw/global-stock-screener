@@ -185,6 +185,8 @@ def annotate(df: pd.DataFrame, symbol_col: str = "Symbol") -> pd.DataFrame:
 def turnover(symbol: str) -> Optional[float]:
     """USD median daily turnover for one symbol (from the cached index)."""
     idx = _load_index()
+    if idx.empty:  # no index built yet (same guard as liquid_symbols)
+        return None
     hit = idx[idx["Symbol"] == symbol]
     return float(hit.iloc[0]["turnover_usd"]) if not hit.empty else None
 
