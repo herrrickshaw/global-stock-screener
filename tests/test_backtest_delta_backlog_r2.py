@@ -30,9 +30,10 @@ def test_pit_guards_and_values():
     assert flat["pct_from_high"] == 0.0 and flat["ret126"] == 0.0
     assert flat["sma50"] == 10.0 and flat["sma200"] == 10.0
     # only losses -> RSI 0
-    down = bt._pit(np.linspace(500, 100, 300), 299)
+    series = np.linspace(500, 100, 300)
+    down = bt._pit(series, 299)
     assert down["rsi"] == pytest.approx(0.0)
-    assert down["pct_from_high"] == pytest.approx(-80.0)
+    assert down["pct_from_high"] == pytest.approx((100 / series[-252:].max() - 1) * 100)  # 252-bar high
     # ret126 uses 126 bars back
     ramp = np.arange(1.0, 301.0)
     f = bt._pit(ramp, 299)
