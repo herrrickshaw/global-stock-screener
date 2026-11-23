@@ -122,7 +122,9 @@ def test_fetch_fii_dii_rows(store, monkeypatch):
 
 
 def test_fetch_non_list_fiidii_and_total_failure(store, monkeypatch, capsys):
-    fake_nse(monkeypatch, nse_get_index_quote=lambda n: {"lastPrice": 20}, nse_fiidii=lambda: {"a": 1})
+    fake_nse(
+        monkeypatch, nse_get_index_quote=lambda n: {"lastPrice": 20}, nse_fiidii=lambda: {"a": 1}
+    )
     out = fr.fetch(verbose=False)
     assert set(out) == {"vix", "asof"} and out["vix"] == 20.0
     # nothing at all -> nothing written, failure message
@@ -149,7 +151,9 @@ def test_flows_main(store, monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["fr", "--fetch"])
     fr.main()
     assert called == [1]
-    assert "India regime: Neutral  (score 14.0) — VIX 14.0, FII net ₹100cr" in capsys.readouterr().out
+    assert (
+        "India regime: Neutral  (score 14.0) — VIX 14.0, FII net ₹100cr" in capsys.readouterr().out
+    )
 
 
 # ---------------- results_calendar ----------------
@@ -207,7 +211,9 @@ def test_fetch_events_dataframe_and_list(monkeypatch, capsys):
     out = rc.fetch_events()
     assert out == {"ABC": "2026-03-12", "DEF": "2026-03-11", "JKL": "2026-03-14"}
     assert "events fetched: 3" in capsys.readouterr().out
-    fake_nse(monkeypatch, nse_events=lambda: [{"symbol": "x", "date": "2026-01-01"}, {"symbol": "y"}])
+    fake_nse(
+        monkeypatch, nse_events=lambda: [{"symbol": "x", "date": "2026-01-01"}, {"symbol": "y"}]
+    )
     assert rc.fetch_events(verbose=False) == {"X": "2026-01-01"}
     fake_nse(monkeypatch, nse_events=lambda: None)
     assert rc.fetch_events(verbose=False) == {}

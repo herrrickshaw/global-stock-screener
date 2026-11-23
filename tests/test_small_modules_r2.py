@@ -130,18 +130,25 @@ def test_factor_main_modes(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "'Mkt-RF'" in out and "'SMB'" in out and "'n': 60" in out
     p = tmp_path / "ff3.parquet"
-    pd.DataFrame({"Mkt-RF": [1.0, 2.0, 3.0], "SMB": [0.0] * 3, "HML": [0.0] * 3, "RF": [0.0] * 3}).to_parquet(p)
+    pd.DataFrame(
+        {"Mkt-RF": [1.0, 2.0, 3.0], "SMB": [0.0] * 3, "HML": [0.0] * 3, "RF": [0.0] * 3}
+    ).to_parquet(p)
     monkeypatch.setattr(fa, "FF3", p)
     monkeypatch.setattr(sys, "argv", ["fa"])
     fa.main()
-    assert capsys.readouterr().out.strip() == "provide a return series via analyze_returns(); FF3 rows: 3"
+    assert (
+        capsys.readouterr().out.strip()
+        == "provide a return series via analyze_returns(); FF3 rows: 3"
+    )
 
 
 # ---------------- total_return ----------------
 def test_total_return_math_edges():
     assert tr.total_return_from([100, 110, 121]) == 21.0
     assert tr.total_return_from([0, 5]) == 0.0  # non-positive start
-    assert tr.total_return_from([100, 0, 50]) == -100.0  # price fell to 0; the 0->50 step is skipped (no div by 0)
+    assert (
+        tr.total_return_from([100, 0, 50]) == -100.0
+    )  # price fell to 0; the 0->50 step is skipped (no div by 0)
     assert tr.total_return_from([100, 100, 100], [0, 5, 5]) == 10.25
     assert tr.price_return_from([100]) == 0.0
     assert tr.price_return_from([0, 5]) == 0.0
@@ -195,7 +202,15 @@ def test_total_return_suffix_table():
 
 def test_total_return_main(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["tr", "--symbol", "TCS"])
-    monkeypatch.setattr(tr, "total_return", lambda s, m, p: {"symbol": s, "price_return": 1, "total_return": 3, "dividend_uplift": 2} if (m, p) == ("IN", "1y") else {})
+    monkeypatch.setattr(
+        tr,
+        "total_return",
+        lambda s, m, p: (
+            {"symbol": s, "price_return": 1, "total_return": 3, "dividend_uplift": 2}
+            if (m, p) == ("IN", "1y")
+            else {}
+        ),
+    )
     assert tr.main() == 0
     assert capsys.readouterr().out.strip() == "TCS: price 1% | total 3% | dividend uplift 2%"
     monkeypatch.setattr(sys, "argv", ["tr", "--symbol", "TCS", "--market", "US"])
@@ -240,7 +255,13 @@ def test_weights_edge_cases():
 
 def test_rebalance_boundaries_and_flags():
     rows = [
-        {"symbol": "EQ", "weight": 0.10, "signal": "BUY", "flags": "", "sector": "S1"},  # == cap: ok
+        {
+            "symbol": "EQ",
+            "weight": 0.10,
+            "signal": "BUY",
+            "flags": "",
+            "sector": "S1",
+        },  # == cap: ok
         {"symbol": "OV", "weight": 0.1001, "signal": "HOLD", "flags": "", "sector": "S2"},
         {"symbol": "FL", "weight": 0.01, "signal": "HOLD", "flags": "IMPAIRED x", "sector": "?"},
         {"symbol": "SL", "weight": 0.5, "signal": "SELL", "flags": "", "sector": ""},
@@ -259,7 +280,9 @@ def test_rebalance_boundaries_and_flags():
     ]
     rows3 = [{"symbol": "A", "weight": 0.9, "signal": "BUY", "flags": "", "sector": "?"}]
     assert pa.rebalance_actions(rows3, max_name=1.0) == []
-    assert pa.rebalance_actions([{"symbol": "A", "weight": 0.9, "signal": "BUY"}], max_name=1.0) == []
+    assert (
+        pa.rebalance_actions([{"symbol": "A", "weight": 0.9, "signal": "BUY"}], max_name=1.0) == []
+    )
 
 
 def test_analyze_full(monkeypatch, capsys):
@@ -273,7 +296,11 @@ def test_analyze_full(monkeypatch, capsys):
     )
     calls = install(monkeypatch, frame, {"AAA": "Tech", "BBB": "Tech", "CCC": "Bank"})
     out = pa.analyze({"aaa": 2, "bbb": 1, "ccc": 1, "ddd": 1, "eee": 1}, "IN")
-    assert calls[0][0] == ["AAA", "BBB", "CCC", "DDD", "EEE"] and calls[0][1:] == ("IN", False, False)
+    assert calls[0][0] == ["AAA", "BBB", "CCC", "DDD", "EEE"] and calls[0][1:] == (
+        "IN",
+        False,
+        False,
+    )
     assert out["n"] == 5 and out["market"] == "IN"
     # weights /6: AAA .333, others .1667; weighted PE over AAA,BBB = (20*2+40*1)/3
     assert out["weighted_pe"] == round((20 * 2 + 40 * 1) / 3, 1)

@@ -112,7 +112,9 @@ def test_sql_param_binding(monkeypatch):
 @pytest.fixture
 def sqlrec(monkeypatch):
     rec = []
-    monkeypatch.setattr(q, "sql", lambda query, params=None: (rec.append((query, params)), pd.DataFrame())[1])
+    monkeypatch.setattr(
+        q, "sql", lambda query, params=None: (rec.append((query, params)), pd.DataFrame())[1]
+    )
     return rec
 
 
@@ -153,7 +155,10 @@ def test_main_default_and_custom_query(monkeypatch, capsys):
     assert q.main() == 0
     assert "GROUP BY 1 ORDER BY 2 DESC" in seen[0] and "n_syms" in seen[0]
     out = capsys.readouterr().out
-    assert out.splitlines()[0].split() == ["a"] and [l.strip() for l in out.splitlines()[1:]] == ["1", "2"]
+    assert out.splitlines()[0].split() == ["a"] and [l.strip() for l in out.splitlines()[1:]] == [
+        "1",
+        "2",
+    ]
     monkeypatch.setattr(sys, "argv", ["q", "SELECT 7"])
     q.main()
     assert seen[-1] == "SELECT 7"

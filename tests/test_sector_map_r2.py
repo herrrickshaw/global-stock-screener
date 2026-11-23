@@ -39,9 +39,7 @@ def fake_yf(monkeypatch, infos):
 
 
 def serving_df():
-    return pd.DataFrame(
-        {"Symbol": ["A", "B", "C", "D"], "Turnover_USD": [1.0, 4.0, 3.0, 2.0]}
-    )
+    return pd.DataFrame({"Symbol": ["A", "B", "C", "D"], "Turnover_USD": [1.0, 4.0, 3.0, 2.0]})
 
 
 def test_cache_path(cache):
@@ -165,7 +163,14 @@ def test_rotation_min_names_boundary_values_and_sort():
     out2 = sm.rotation(_srv(rows), smap, min_names=2)
     assert set(out2["Sector"]) == {"A", "B", "C"}
     # tie on breadth -> higher MedRet63 first
-    rows3 = [("X1", 1, 9, 1), ("X2", 1, 9, 1), ("X3", 1, 9, 1), ("Y1", 1, 1, 1), ("Y2", 1, 1, 1), ("Y3", 1, 1, 1)]
+    rows3 = [
+        ("X1", 1, 9, 1),
+        ("X2", 1, 9, 1),
+        ("X3", 1, 9, 1),
+        ("Y1", 1, 1, 1),
+        ("Y2", 1, 1, 1),
+        ("Y3", 1, 1, 1),
+    ]
     smap3 = {r[0]: r[0][0] for r in rows3}
     assert list(sm.rotation(_srv(rows3), smap3)["Sector"]) == ["X", "Y"]
 
@@ -183,7 +188,9 @@ def test_report_paths(cache, monkeypatch, capsys):
     assert "no sector cache" in capsys.readouterr().out
     assert sm.report("IN", verbose=False).empty
     assert capsys.readouterr().out == ""
-    pd.DataFrame({"Symbol": ["A", "B", "C"], "Sector": ["Hot"] * 3}).to_parquet(cache / "IN.parquet")
+    pd.DataFrame({"Symbol": ["A", "B", "C"], "Sector": ["Hot"] * 3}).to_parquet(
+        cache / "IN.parquet"
+    )
     monkeypatch.setattr(
         sm.sl, "serving", lambda m: _srv([("A", 30, 3, 1), ("B", 30, 3, 1), ("C", 30, 3, 1)])
     )

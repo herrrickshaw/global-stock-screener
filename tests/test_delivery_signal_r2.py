@@ -129,7 +129,12 @@ def test_fetch_nothing_new_does_not_write_and_quiet(cache, monkeypatch, capsys):
 def test_fetch_dedups_same_symbol_date(cache, monkeypatch):
     monkeypatch.setattr(ds._dt, "date", FixedDate)
     d0 = pd.DataFrame(
-        {"Date": [pd.Timestamp(2026, 3, 11)] * 2, "Symbol": ["A", "A"], "DelivPct": [1.0, 2.0], "Volume": [1, 1]}
+        {
+            "Date": [pd.Timestamp(2026, 3, 11)] * 2,
+            "Symbol": ["A", "A"],
+            "DelivPct": [1.0, 2.0],
+            "Volume": [1, 1],
+        }
     )
     monkeypatch.setattr(ds, "_fetch_day", lambda d: d0)
     ds.fetch(days=1, verbose=False)
@@ -150,6 +155,7 @@ def _hist(sym, vals):
 
 def test_accumulation_signal_boundaries():
     base = [50.0] * 20
+
     def sig(recent):
         df = _hist("X", base + recent)
         return ds.accumulation_scores(df).iloc[0]
@@ -175,7 +181,11 @@ def test_accumulation_signal_boundaries():
 def test_accumulation_min_length_and_empty_and_zero_base():
     assert ds.accumulation_scores(pd.DataFrame()).empty
     assert list(ds.accumulation_scores(pd.DataFrame()).columns) == [
-        "Symbol", "DelivRecent", "DelivBase", "AccumScore", "Signal"
+        "Symbol",
+        "DelivRecent",
+        "DelivBase",
+        "AccumScore",
+        "Signal",
     ]
     # needs recent + 3 observations
     assert ds.accumulation_scores(_hist("X", [50.0] * 7)).empty
@@ -196,7 +206,9 @@ def test_accumulation_sorted_and_params():
     row = out2.iloc[0]
     assert row["DelivRecent"] == 20.0 and row["DelivBase"] == 10.0 and row["AccumScore"] == 2.0
     # base window caps at `base` observations
-    out3 = ds.accumulation_scores(_hist("X", [100.0] * 10 + [10.0] * 3 + [20.0] * 2), recent=2, base=3)
+    out3 = ds.accumulation_scores(
+        _hist("X", [100.0] * 10 + [10.0] * 3 + [20.0] * 2), recent=2, base=3
+    )
     assert out3.iloc[0]["DelivBase"] == 10.0
 
 

@@ -33,7 +33,9 @@ def test_pit_guards_and_values():
     series = np.linspace(500, 100, 300)
     down = bt._pit(series, 299)
     assert down["rsi"] == pytest.approx(0.0)
-    assert down["pct_from_high"] == pytest.approx((100 / series[-252:].max() - 1) * 100)  # 252-bar high
+    assert down["pct_from_high"] == pytest.approx(
+        (100 / series[-252:].max() - 1) * 100
+    )  # 252-bar high
     # ret126 uses 126 bars back
     ramp = np.arange(1.0, 301.0)
     f = bt._pit(ramp, 299)
@@ -49,7 +51,9 @@ def test_screen_predicate_boundaries():
     assert S["golden_crossover"](base)
     assert S["golden_crossover"]({**base, "sma50_prev": 1, "sma200_prev": 1})  # prev equal counts
     assert not S["golden_crossover"]({**base, "sma50_prev": 1.5})
-    assert S["near_high"]({**base, "pct_from_high": -3}) and not S["near_high"]({**base, "pct_from_high": -3.01})
+    assert S["near_high"]({**base, "pct_from_high": -3}) and not S["near_high"](
+        {**base, "pct_from_high": -3.01}
+    )
     assert S["rsi_oversold"]({**base, "rsi": 29.99}) and not S["rsi_oversold"]({**base, "rsi": 30})
     assert S["momentum"]({**base, "ret126": 25.01}) and not S["momentum"]({**base, "ret126": 25})
     assert not S["momentum"]({**base, "ret126": 30, "sma50": 1})
@@ -59,7 +63,13 @@ def test_edge_metrics_values():
     m = bt.edge_metrics([10.0, 2.0, -1.0], [5.0, 2.0, 3.0])
     assert m == {"trades": 3, "avg_ret": 3.67, "mkt_ret": 3.33, "edge": 0.33, "win_rate": 0.333}
     assert bt.edge_metrics([], [])["trades"] == 0
-    assert bt.edge_metrics([], []) == {"trades": 0, "avg_ret": 0.0, "mkt_ret": 0.0, "edge": 0.0, "win_rate": 0.0}
+    assert bt.edge_metrics([], []) == {
+        "trades": 0,
+        "avg_ret": 0.0,
+        "mkt_ret": 0.0,
+        "edge": 0.0,
+        "win_rate": 0.0,
+    }
 
 
 def _df(closes):
@@ -79,7 +89,11 @@ def test_backtest_falls_back_to_default_tier_and_skips_short_and_none(monkeypatc
         seen.append(tier)
         if tier == "ltm":
             return {}
-        return {"LONG": _df(np.linspace(100, 300, 400)), "SHORT": _df(np.linspace(1, 2, 221)), "NONE": None}
+        return {
+            "LONG": _df(np.linspace(100, 300, 400)),
+            "SHORT": _df(np.linspace(1, 2, 221)),
+            "NONE": None,
+        }
 
     monkeypatch.setattr(bt.datalink, "load_market", load)
     r = bt.backtest_screen("IN", "golden_state", horizon=21, step=21)
@@ -124,14 +138,33 @@ def test_horizon_changes_eligibility(monkeypatch):
 
 
 def test_run_all_sorts_and_prints(monkeypatch, capsys):
-    edges = {"golden_state": 1.0, "golden_crossover": 3.0, "near_high": 2.0, "rsi_oversold": -1.0, "momentum": 0.5}
+    edges = {
+        "golden_state": 1.0,
+        "golden_crossover": 3.0,
+        "near_high": 2.0,
+        "rsi_oversold": -1.0,
+        "momentum": 0.5,
+    }
     monkeypatch.setattr(
         bt,
         "backtest_screen",
-        lambda m, s, h: {"screen": s, "trades": 1, "avg_ret": 0, "mkt_ret": 0, "edge": edges[s], "win_rate": 0},
+        lambda m, s, h: {
+            "screen": s,
+            "trades": 1,
+            "avg_ret": 0,
+            "mkt_ret": 0,
+            "edge": edges[s],
+            "win_rate": 0,
+        },
     )
     df = bt.run_all("IN", 10)
-    assert list(df["screen"]) == ["golden_crossover", "near_high", "golden_state", "momentum", "rsi_oversold"]
+    assert list(df["screen"]) == [
+        "golden_crossover",
+        "near_high",
+        "golden_state",
+        "momentum",
+        "rsi_oversold",
+    ]
     out = capsys.readouterr().out
     assert "Walk-forward backtest — IN (10d hold)" in out and "edge = screen avg" in out
     bt.run_all("IN", 10, verbose=False)
@@ -144,16 +177,27 @@ def test_backtest_main(monkeypatch, capsys):
     monkeypatch.setattr(
         bt,
         "backtest_screen",
-        lambda m, s, h: {"trades": 4, "avg_ret": 1.5, "mkt_ret": 1.0, "edge": 0.5, "win_rate": 0.25},
+        lambda m, s, h: {
+            "trades": 4,
+            "avg_ret": 1.5,
+            "mkt_ret": 1.0,
+            "edge": 0.5,
+            "win_rate": 0.25,
+        },
     )
     monkeypatch.setattr(sys, "argv", ["bt"])
     assert bt.main() == 0 and calls == [("all", "IN", 21)]
-    monkeypatch.setattr(sys, "argv", ["bt", "--all", "--screen", "momentum", "--market", "US", "--horizon", "5"])
+    monkeypatch.setattr(
+        sys, "argv", ["bt", "--all", "--screen", "momentum", "--market", "US", "--horizon", "5"]
+    )
     bt.main()
     assert calls[-1] == ("all", "US", 5)
     monkeypatch.setattr(sys, "argv", ["bt", "--screen", "momentum", "--market", "US"])
     bt.main()
-    assert capsys.readouterr().out.strip() == "momentum on US: 4 trades, avg 1.5% vs mkt 1.0% → edge 0.5%, win 25%"
+    assert (
+        capsys.readouterr().out.strip()
+        == "momentum on US: 4 trades, avg 1.5% vs mkt 1.0% → edge 0.5%, win 25%"
+    )
 
 
 # ---------------- watchlist_delta ----------------
@@ -175,7 +219,10 @@ def test_last_two_sorted_and_market_scoped(snap):
     for d in ("2026-01-03", "2026-01-01", "2026-01-02"):
         write(snap, "IN", d, [("A", "BUY", "")])
     write(snap, "US", "2026-02-01", [("A", "BUY", "")])
-    assert [p.name for p in wd._last_two("IN")] == ["IN_2026-01-02.parquet", "IN_2026-01-03.parquet"]
+    assert [p.name for p in wd._last_two("IN")] == [
+        "IN_2026-01-02.parquet",
+        "IN_2026-01-03.parquet",
+    ]
     assert wd._last_two("XX") == []
 
 
@@ -198,7 +245,10 @@ def test_diff_new_symbol_and_flag_rules(snap):
     assert set(rows) == {"A", "C", "D", "E"}
     assert rows["A"].Change == "NEW-FLAG" and rows["A"].Flags == "PLEDGE"
     assert rows["C"].Change == "UPGRADE" and rows["C"].From == "—"
-    assert rows["D"].Change == "NEW-FLAG" and set(rows["D"].Flags.split()) == {"DISTRIBUTION", "IMPAIRED"}
+    assert rows["D"].Change == "NEW-FLAG" and set(rows["D"].Flags.split()) == {
+        "DISTRIBUTION",
+        "IMPAIRED",
+    }
     assert rows["E"].Change == "DOWNGRADE"
     assert s == {"dates": "2026-01-01 → 2026-01-02", "new_buys": 1, "downgrades": 1, "new_flags": 2}
 
@@ -207,7 +257,12 @@ def test_diff_no_changes_has_zero_summary(snap):
     write(snap, "IN", "2026-01-01", [("A", "BUY", "")])
     write(snap, "IN", "2026-01-02", [("A", "BUY", "")])
     d, s = wd.diff("IN")
-    assert d.empty and s == {"dates": "2026-01-01 → 2026-01-02", "new_buys": 0, "downgrades": 0, "new_flags": 0}
+    assert d.empty and s == {
+        "dates": "2026-01-01 → 2026-01-02",
+        "new_buys": 0,
+        "downgrades": 0,
+        "new_flags": 0,
+    }
 
 
 def test_diff_upgrade_not_to_buy_isnt_new_buy(snap):
@@ -326,9 +381,25 @@ def test_load_returns_existing_and_save_roundtrip(store):
 
 
 def test_next_pi_capacity_boundary_and_skipping():
-    mk = lambda i, v, s: {"id": i, "value": v, "time_criticality": 0, "risk": 0, "job_size": s, "status": "todo"}
+    def mk(i, v, s):
+        return {
+            "id": i,
+            "value": v,
+            "time_criticality": 0,
+            "risk": 0,
+            "job_size": s,
+            "status": "todo",
+        }
+
     items = [mk("A", 10, 5), mk("B", 9, 5), mk("C", 8, 5), mk("D", 100, 20), mk("E", 1, 1)]
-    done = {"id": "Z", "value": 99, "time_criticality": 0, "risk": 0, "job_size": 1, "status": "done"}
+    done = {
+        "id": "Z",
+        "value": 99,
+        "time_criticality": 0,
+        "risk": 0,
+        "job_size": 1,
+        "status": "done",
+    }
     plan = bl.next_pi(items + [done], capacity=15)
     # ranked by WSJF: E(1.0)... compute: A2, B1.8, C1.6, D5, E1 -> D too big, A,B,C = 15 (exact fit), E won't fit
     assert [i["id"] for i in plan] == ["A", "B", "C"]

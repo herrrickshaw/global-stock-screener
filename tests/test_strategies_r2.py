@@ -30,7 +30,14 @@ def test_stockdata_accessors():
 
 def test_result_row():
     r = Result("A", "x", True, score=1.5, metrics={"m": 2}, note="n")
-    assert r.row() == {"Symbol": "A", "Strategy": "x", "Pass": "YES", "Score": 1.5, "m": 2, "Note": "n"}
+    assert r.row() == {
+        "Symbol": "A",
+        "Strategy": "x",
+        "Pass": "YES",
+        "Score": 1.5,
+        "m": 2,
+        "Note": "n",
+    }
     assert Result("A", "x", False).row()["Pass"] == "NO"
 
 
@@ -76,7 +83,10 @@ def test_bbc_boundaries_pass():
 def test_bbc_each_check_fails(over, key):
     r = bbc.screen(good_bbc(**over))
     assert not r.passed and r.metrics[key] == 0 and r.note == ""
-    assert sum(r.metrics[k] for k in ("MCap>3000cr", "ProfitGrowth>=10", "ROE>=15", "ValAttractive")) == 3
+    assert (
+        sum(r.metrics[k] for k in ("MCap>3000cr", "ProfitGrowth>=10", "ROE>=15", "ValAttractive"))
+        == 3
+    )
 
 
 def test_bbc_fallbacks():
@@ -120,12 +130,21 @@ def test_dr_fail_modes():
     r = dr.screen(S(debt_history=[100, 80], capex_history=[9, 7]))
     assert not r.passed and r.metrics["DebtFalling"] == 0 and r.note == ""
     # equal consecutive debt is not falling (strict)
-    assert dr.screen(S(debt_history=[80, 80, 100], capex_history=[9, 7])).metrics["DebtFalling"] == 0
+    assert (
+        dr.screen(S(debt_history=[80, 80, 100], capex_history=[9, 7])).metrics["DebtFalling"] == 0
+    )
     # capex not expanding: equal, shrinking, or too short
-    assert dr.screen(S(debt_history=[50, 80], capex_history=[7, 7])).metrics["CapacityExpanding"] == 0
-    assert dr.screen(S(debt_history=[50, 80], capex_history=[5, 7])).metrics["CapacityExpanding"] == 0
+    assert (
+        dr.screen(S(debt_history=[50, 80], capex_history=[7, 7])).metrics["CapacityExpanding"] == 0
+    )
+    assert (
+        dr.screen(S(debt_history=[50, 80], capex_history=[5, 7])).metrics["CapacityExpanding"] == 0
+    )
     assert dr.screen(S(debt_history=[50, 80], capex_history=[9])).metrics["CapacityExpanding"] == 0
-    assert dr.screen(S(debt_history=[50, 80], gross_block_history=[100])).metrics["CapacityExpanding"] == 0
+    assert (
+        dr.screen(S(debt_history=[50, 80], gross_block_history=[100])).metrics["CapacityExpanding"]
+        == 0
+    )
     assert not dr.screen(S(debt_history=[50, 80])).passed
 
 
@@ -158,14 +177,21 @@ def test_dy_history_fallback():
     r3 = dy.screen(S(dividend_yield=3))
     assert r3.metrics["PayYears"] == 0 and not r3.passed
     # explicit pay years wins over history
-    assert dy.screen(S(dividend_yield=3, dividend_pay_years=0, dividend_history=[1, 1, 1])).metrics["PayYears"] == 0
+    assert (
+        dy.screen(S(dividend_yield=3, dividend_pay_years=0, dividend_history=[1, 1, 1])).metrics[
+            "PayYears"
+        ]
+        == 0
+    )
 
 
 # ---------------- loss to profit ----------------
 def test_ltp_turnaround():
     r = ltp.screen(S(quarterly_net_income=[10, -5, 3, 4]))
     assert r.passed and r.note == "turnaround" and r.score == 10
-    assert r.metrics["PriorQ_NI"] == -5 and r.metrics["WasLoss"] == 1 and r.metrics["NowProfit"] == 1
+    assert (
+        r.metrics["PriorQ_NI"] == -5 and r.metrics["WasLoss"] == 1 and r.metrics["NowProfit"] == 1
+    )
     assert r.metrics["Swing%"] == 300.0
 
 
