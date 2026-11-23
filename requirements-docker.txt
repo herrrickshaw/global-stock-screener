@@ -5,7 +5,7 @@ pyarrow==21.0.0
 lmdb==2.2.1
 openpyxl==3.1.5
 requests==2.32.5
-nsepython==2.97
+nsepython==2.101
 bseindia==1.1
 nse==3.1.0
 feedparser==6.0.12
