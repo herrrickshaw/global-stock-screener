@@ -428,3 +428,30 @@ def test_backlog_main_modes(store, capsys, monkeypatch):
     assert "Proposed next PI (capacity 8 pts)" in out
     committed = int(out.split("committed: ")[1].split(" pts")[0])
     assert 0 < committed <= 8
+
+
+def test_glitch_bar_just_above_500pct_is_dropped(monkeypatch):
+    c = np.linspace(100, 300, 400)
+    c[260:] *= 6.0  # windows crossing the jump return ~530%
+    monkeypatch.setattr(bt.datalink, "load_market", lambda m, tier=None: {"G": _df(c)})
+    r = bt.backtest_screen("IN", "golden_state", horizon=21, step=1)
+    assert r["trades"] == 157 and r["avg_ret"] < 10
+
+
+def test_diff_with_single_snapshot_returns_note(snap):
+    write(snap, "IN", "2026-01-01", [("A", "BUY", "")])
+    d, s = wd.diff("IN")
+    assert d.empty and s == {"note": "need 2 snapshots"}
+
+
+def test_diff_weak_flag_is_a_risk_flag(snap):
+    write(snap, "IN", "2026-01-01", [("A", "HOLD", "")])
+    write(snap, "IN", "2026-01-02", [("A", "HOLD", "WEAK")])
+    d, s = wd.diff("IN")
+    assert list(d["Change"]) == ["NEW-FLAG"] and list(d["Flags"]) == ["WEAK"]
+
+
+def test_wsjf_job_size_zero_or_missing_defaults_to_one():
+    assert bl.wsjf({"value": 6, "time_criticality": 0, "risk": 0, "job_size": 0}) == 6.0
+    assert bl.wsjf({"value": 6, "time_criticality": 0, "risk": 0}) == 6.0
+    assert bl.wsjf({"value": 6, "time_criticality": 3, "risk": 3, "job_size": 4}) == 3.0

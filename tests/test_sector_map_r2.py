@@ -222,3 +222,21 @@ def test_main(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["sm"])
     sm.main()
     assert calls == [("r", "IN")]
+
+
+def test_rotation_breadth_exactly_035_is_laggard():
+    n = 20
+    rows = [(f"S{i}", 10, 1, 1 if i < 7 else 0) for i in range(n)]  # breadth 7/20 = 0.35
+    out = sm.rotation(_srv(rows), {f"S{i}": "Sec" for i in range(n)})
+    assert out.iloc[0]["Breadth"] == 0.35 and out.iloc[0]["Phase"] == "Laggard"
+
+
+def test_fetch_skips_cached_before_applying_limit(cache, monkeypatch):
+    pd.DataFrame({"Symbol": ["B", "C"], "Sector": ["x", "y"]}).to_parquet(
+        cache / "IN.parquet", index=False
+    )
+    asked = fake_yf(monkeypatch, {"A.NS": {"sector": "s"}, "D.NS": {"sector": "t"}})
+    monkeypatch.setattr(sm.sl, "serving", lambda m: serving_df())  # turnover: B, C, D, A
+    sm.fetch("IN", limit=2, verbose=False)
+    # the top-`limit` names (B, C) are already cached, so the next uncached ones are tagged
+    assert asked == ["D.NS", "A.NS"]

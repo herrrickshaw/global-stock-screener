@@ -278,3 +278,8 @@ def test_run_all_filters_and_isolates(monkeypatch):
     monkeypatch.setitem(st.STRATEGIES, "boom", Boom)
     assert "boom" not in st.run_all(s)
     assert "boom" not in st.run_all(s, only_needs="price")
+
+
+def test_ltp_zero_prior_quarter_is_not_a_loss():
+    r = ltp.screen(S(quarterly_net_income=[5, 0, 3, 4]))
+    assert not r.passed and r.metrics["WasLoss"] == 0
